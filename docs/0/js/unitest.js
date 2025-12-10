@@ -184,6 +184,7 @@ class Unitest {
         const msg = ['','型が','メッセージが','型もメッセージも'][i];
         const E = [c.expected.type.name, c.expected.msg];
         const A = [e.constructor.name, e.message];
+        console.log('i:',i, 'c.expected.msg:',c.expected.msg, c);
         return msg ? `テスト失敗。例外の${msg}違います。\n期待値:${3===i ? E.join(', ') : E[i-1]}\n実際値:${3===i ? A.join(', ') : A[i-1]}` : msg;
 //        const E = {type:c.excepted.type.name, msg:c.expected.msg}
 //        const A = {type:e.constructor.name, msg:e.message}
@@ -370,7 +371,10 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
          || (isErrCls(expected) && 1===args.length && isFn(L))
          || (isErrCls(expected) && 2===args.length && (isS(args[0]) || isReg(args[0])) && isFn(L))) {this._.cases.push({
             id: this._.id++,
-            expected: isB(expected) ? expected : ({type:isErrCls(expected) ? expected : expected.constructor, msg:isErrCls(expected) && 1===args.length ? undefined : args[0]}),
+            expected: isB(expected)
+                ? expected
+                : ({type: (isErrCls(expected) ? expected : expected.constructor),
+                    msg: (isErrCls(expected) && 1===args.length ? undefined : (isErrIns(expected) ? expected.message : args[0]))}),
             //test: isFn(L) ? L : ()=>expected,
             test: isFn(L) ? L : ()=>args[0],
             isAsync:0===args.length ? false : isAFn(L),
