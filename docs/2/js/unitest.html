@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head prefix="og: https://ogp.me/ns#">
+<meta charset="utf-8">
+<title>unitest.js動作確認</title>
+<meta name="description" content="値を代入したら任意の処理を実行する。">
+<meta name="author" content="ytyaru">
+<link rel="license" href="https://creativecommons.org/licenses/by-sa/4.0/deed.ja">
+<link rel="icon" href="../asset/image/author/ytyaru.png">
+<meta property="og:type" content="article">
+<meta property="og:title" content="値を代入したら任意の処理を実行する。">
+<meta property="og:description" content="値を代入したら任意の処理を実行する。">
+<meta property="og:url" content="https://ytyaru.github.io/JS.ObservedProperties.20251109094628/index.html">
+<meta property="og:site_name" content="GitHub Pages">
+<!--<meta property="og:image" content="https://github.com/ytyaru/JS.ObservedProperties.20251109094628/blob/master/docs/asset/image/eye-catch.png?raw=true">-->
+<!--<link rel="stylesheet" href="css/style.css">-->
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!--
+<script src="../lib/van/1.5.3/nomodule/min.js"></script>
+<script src="../js/footer.js"></script>
+<script src="../lib/util/type.js"></script>
+<script src="../lib/util/test/assertion.js"></script>
+<script src="js/observed-properties.js"></script>
+<script src="js/main.js"></script>
+-->
+<script src="unitest.js"></script>
+<script defer>
+unitest.assert((a)=>{
+    // 期待値:true
+//    a.t(false);
+//    a.t(()=>{throw new Error(`なんかエラー`)}); // 例外
+//    throw new Error('テストコード定義中でなんかエラーが出ちゃった');
+    a.t(true);
+    a.t(false); // 失敗: id:1
+    a.t(()=>true);
+    a.t(()=>{throw new Error(`なんかエラー`)}); // 例外
+    a.t(async()=>true);
+    a.t(async()=>false); // 失敗
+    a.t(async()=>{throw new Error(`なんかエラー`)}); // 例外
+    // 期待値:false
+    a.f(true); // 失敗: id:6
+    a.f(false);
+    a.f(()=>true); // 失敗
+    a.f(()=>{throw new Error(`なんかエラー`)});
+    a.f(async()=>true);
+    a.f(async()=>false);
+    a.f(async()=>{throw new Error(`なんかエラー`)}); // エラー
+    // 期待値:例外発生
+    a.e(TypeError, ()=>{throw new TypeError('テキトーなメッセージ')});
+    /*
+    a.e(TypeError, 'テキトーなメッセージ', ()=>{throw new TypeError('テキトーなメッセージ')});
+    a.e(TypeError, /^テキトーな/, ()=>{throw new TypeError('テキトーなメッセージ')});
+    a.e(TypeError, /なメッセ/, ()=>{throw new TypeError('テキトーなメッセージ')});
+    a.e(TypeError, /なメッセージ$/, ()=>{throw new TypeError('テキトーなメッセージ')});
+    a.e(new TypeError('テキトーなメッセージ'), ()=>{throw new TypeError('テキトーなメッセージ')});
+    */
+});
+</script>
+</head>
+<body></body>
+</html>
+<!-- https://coliss.com/articles/build-websites/operation/work/html-template-for-web-apps-or-sites.html -->
+<!-- https://coliss.com/articles/build-websites/operation/work/html5-template-for-2018.html -->
+
