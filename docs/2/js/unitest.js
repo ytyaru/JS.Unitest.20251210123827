@@ -46,6 +46,8 @@ const Status = {
 //    fail:      {name:'失敗', color:{f:'#AA0000',b:'#FFABCE'}},
 //    success:   {name:'成功', color:{f:'#008800',b:'#AEFFBD'}},
 };
+const isSafeInt = (v)=>Number.isSafeInteger(v),
+      isStr = (v)=>'string'===typeof v;
 const StatusCodeOfNames = ['success', 'fail', 'exception', 'pending'];
 class Unitest {
     constructor() {
@@ -323,14 +325,39 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
     }
 }
 class AssertStatus {
+    static get #data() {return ({
+        pending:   {code:3, label:'保留', color:{f:'#666666',b:'#CCCCCC'}},
+        exception: {code:2, label:'例外', color:{f:'#0000AA',b:'#99CCFF'}},
+        fail:      {code:1, label:'失敗', color:{f:'#AA0000',b:'#FFABCE'}},
+        success:   {code:0, label:'成功', color:{f:'#008800',b:'#AEFFBD'}},
+    })}
+//    static getLabel(nc) {return isSafeInt(nc) ? this.#getLabelFromCode(nc) : (isStr(nc) ? this.#getLabelFromName(nc) : (()=>{throw new TypeError(`ncは状態名Stringか状態コードNumberであるべきです。`)})())}
+//    static getColor(nc) {return isSafeInt(nc) ? this.#getLabelFromCode(nc) : (isStr(nc) ? this.#getLabelFromName(nc) : (()=>{throw new TypeError(`ncは状態名Stringか状態コードNumberであるべきです。`)})())}
+//    static #get(nc, target) {return isSafeInt(nc) ? this[`_get${Target}FromCode`](nc) : (isStr(nc) ? this[`_get${Target}FromName`](nc) : (()=>{throw new TypeError(`ncは状態名Stringか状態コードNumberであるべきです。`)})())}
+    static getLabel(nc) {return this.#get('Label', nc)}
+    static getColor(nc) {return this.#get('Color', nc)}
+    static #get(target, nc) {
+        const F = isSafeInt(nc) ? 'Code' : (isStr(nc) ? 'Name' : (()=>{throw new TypeError(`ncは状態名Stringか状態コードNumberであるべきです。`)})());
+        return this[`_get${target}From${F}`](nc);
+    }
+    static _getLabelFromName(name) {return this.#getFromName(name, 'label')}
+    static _getLabelFromCode(code) {return this.#getFromCode(code, 'label')}
+    static _getColorFromName(name) {return this.#getFromName(name, 'color')}
+    static _getColorFromCode(code) {return this.#getFromCode(code, 'color')}
+    static #getFromName(name, target) {console.log(name,target,this.#data);return this.#data[name][target]}
+    static #getFromCode(code, target) {console.log(code,target,this.#data);return this.#data.filter(d=>d.code===code)[0][target]}
+    //static _getLabelFromName(name) {return this.#data[name].label}
+//    static _getColorFromName(name) {return this.#data[name].color}
+//    static _getLabelFromCode(code) {return this.#data.filter(d=>d.code===code)[0].color}
     constructor(a) {this._={a:a, status:{syncs:null, asyncs:null, all:null}}}
     get #syncCases() {return this._.a._.cases.filter(c=>!c.isAsync)} // 同期系テストケース一覧
     get #asyncCases() {return this._.a._.cases.filter(c=>c.isAsync)} // 非同期系テストケース一覧
     get #allCases() {return this._.a._.cases} // 全テストケース一覧
-    get syncs() {return this.#gets('sync', this.#syncCases)}
-    get asyncs() {return this.#gets('async', this.#asyncCases)}
+    get syncs() {return this.#gets('syncs', this.#syncCases)}
+    get asyncs() {return this.#gets('asyncs', this.#asyncCases)}
     get all() {return this.#gets('all', this.#allCases)}
     #gets(name, cases) {
+        console.log(`AssertStatus#gets(name, cases):`, name, cases);
         if (null!==this._.status[name]) {return this._.status[name]} // 一度だけ算出する。以降の参照は使いまわし。
         const P = cases.filter(c=>3===c.statusCode).length, // 保留 Pending
               E = cases.filter(c=>2===c.statusCode).length, // 例外 Exception
@@ -338,7 +365,9 @@ class AssertStatus {
               S = cases.filter(c=>0===c.statusCode).length, // 成功 Succeed
               A = E+F+S+('syncs'===name ? 0 : P),           // 全件 All（syncsの時だけPを除外する）
               R = (S/A);                                    // 比率 Rate (0〜1)
-        return (this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('sync'===name ? '同期テストのみ' : ('async'===name) ? '非同期テストのみ' : '全テスト完了')}));
+        this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('sync'===name ? '同期テストのみ' : ('async'===name) ? '非同期テストのみ' : '全テスト完了')});
+        return this._.status[name];
+        //return (this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('sync'===name ? '同期テストのみ' : ('async'===name) ? '非同期テストのみ' : '全テスト完了')}));
     }
 }
 class StackTracer {
@@ -412,7 +441,9 @@ class ResultLog {
     all(status) {this.#log(this.#getPs('all', status))}
     #getPs(name, status) {
         const R = '100%'===status.percent ? 'success' : 'pending';
-        return [[`${status[name].name} ${status[name].percent} ${status[name].all}`, R], ...'pending exception fail success'.split(' ').map(n=>[`${Status[n].label}:${status[name]}`, n])].map(ln=>this.#getP(...ln))
+        //console.log(name, status, AssertStatus.getLabel(name));
+        console.log(name, status instanceof AssertStatus, status, status.syncs);
+        return [[`${status[name].name} ${status[name].percent} ${status[name].all}`, R], ...'pending exception fail success'.split(' ').map(n=>[`${Status[n].label}:${status[name][n]}`, n])].map(ln=>this.#getP(...ln))
     }
     #getP(label, n){return ({label:label, format:`background-color:${Status[n].color.b};color:${Status[n].color.f};`});}
     #log(P) {console.log(P.reduce((s,p)=>s+`%c${p.label} `, '').trim(), ...P.map(p=>p.format))}
@@ -501,7 +532,7 @@ class ResultHtml {
             table.appendChild(this.#makeProblemThTrEl());
             //for (let c of status.syncStatuses.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
             for (let c of this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
-                table.appendChild(this.#makeProblemTdTrEl());
+                table.appendChild(this.#makeProblemTdTrEl(c));
             }
             this._.el.problem.appendChild(table);
             status[name]
@@ -521,8 +552,8 @@ class ResultHtml {
                 this._.el[n] = div;
                 this._.el.success.appendChild(div);
             });
-            this._.el.count.innerHTML = `${this.#makeCountHtml(status)}`;
-            this._.el.problem.innerHTML = `${this.#makeProblemAreaTable(status)}`;
+            this._.el.count.innerHTML = `${this.#makeCountTableHtml(status)}`;
+            this._.el.problem.innerHTML = `${this.#makeProblemAreaTableHtml(status)}`;
         }
         // ToDo: countは保留など0件のtrを非表示にする。件数を更新する。
         // ToDo: problemは作り直す（同期のみ、非同期のみ、全件では、同期のみ→全件の二段階更新であり、二回目は追加だけが行われうるのであり削除や変更は起きないはず）
@@ -548,6 +579,7 @@ class ResultHtml {
     #makeStyleCss() {return `<style id="${this._.id}-style">table{border-collapse:collapse;}${StatusCodeOfNames.map(n=>`.${n} {background-color:${Status[n].color.b}; color:${Status[n].color.b}; }`).join('\n')}</style>`;}
 //    #${this._id} td:nth-child(2) { text-align: right; }
 //    #makeCountTable(a) {if (!this._.el) {this._.el = document.body.innerHTML = ;}}
+    //#makeCountTableHtml(status) {return `<table id="${this._.id}-count">${this.#makeCountTrsHtml(status)}<table>`;}
     #makeCountTableHtml(status) {return `<table id="${this._.id}-count">${this.#makeCountTrsHtml(status)}<table>`;}
     //#makeCountTrHtml(statusCode, num) {const N=StatusCodeOfNames[statusCode];return `<tr class="${N}"><th>${Status[N].name}</th><td id="${N}-count">${num}</td></tr>`}
     #makeCountTrsHtml(status) {return StatusCodeOfNames.toReversed().map(n=>this.#makeCountTrHtml(n, status[n])).join('')}
@@ -557,7 +589,26 @@ class ResultHtml {
         const cases = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)); // 失敗か例外のテストケースのみ取得する
         return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;
     }
-    #makeProblemThHtml() {return `<tr><th>要約</th><th>箇所</th></tr>`}
+    #makeProblemThTrEl() {
+        const tr = document.createElement('tr');
+        tr.append(...('要約 箇所'.split(' ').map(t=>{
+            const th = document.createElement('th');
+            th.textContent = t;
+            return th;
+        })));
+        return tr;
+    }
+    #makeProblemThHtml() {return `<tr><th>要約</th><th>追跡</th></tr>`}
+    #makeProblemTdTrEl(c) {
+        const tr = document.createElement('tr');
+        const td0 = document.createElement('td');
+        const td1 = document.createElement('td');
+        td0.className = ``;
+        td0.textContent= c.msg.split('\n').join('<br>');
+        td1.textContent = c.stacks.join('<br>');
+        tr.append(td0, td1);
+        return tr;
+    }
     #makeProblemTrsHtml(cases) {cases.map(c=>this.#makeProblemTrHtml(c)).join('')}
     #makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks.join('<br>')}</td></tr>`}
 }
@@ -570,6 +621,7 @@ class Result {
     #run(name) {
         if (!'syncs asyncs all'.split(' ').some(n=>n===name)) {throw new Error(`nameはsyncs,asyncs,allのいずれかであるべきです。`)}
         this._.status[name]; // ステータス算出
+//        console.log(this._.status._[name]);
         this._.log[name](this._.status);
         this._.html[name](this._.status);
         //this._.status[name] = a._statuses;
