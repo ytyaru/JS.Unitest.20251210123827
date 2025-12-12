@@ -51,10 +51,11 @@ const isSafeInt = (v)=>Number.isSafeInteger(v),
 const StatusCodeOfNames = ['success', 'fail', 'exception', 'pending'];
 class Unitest {
     constructor() {
-        this._ = {st:new StackTracer(), fn:null, tcs:null, rl:null};
+        this._ = {st:new StackTracer(), fn:null, tcs:null, rl:null, a:null};
     }
     assert(fn) {
         const a = new Assertion();
+        this._.a = a;
         this._.tcs = new TestCodeStr(fn);
         this.#define(a, fn); // テストケースの定義
         this.#test(a);       // テストケースの実行
@@ -73,11 +74,14 @@ class Unitest {
 //        this._.rl = new ResultLog(a);
         this._.result = new Result(a);
         // 同期系のテストだけを実行する
-        a._.cases.filter(c=>!c.isAsync).map(c=>this.#case(c)); // 同期テストは即時実行する
+//        a._.cases.filter(c=>!c.isAsync).map(c=>this.#case(c)); // 同期テストは即時実行する
+        this._.a._.cases.filter(c=>!c.isAsync).map(c=>this.#case(c)); // 同期テストは即時実行する
+//        for (let i=0; i<a._.cases.length; i++) {if(!a._.cases[i].isAsync){this.#case(a._.cases, i)}} // 同期テストは即時実行する
 
 
         //a._.cases.filter(c=> c.isAsync).map(c=>c.statusCode=3); // 非同期テストは保留状態にする
-        const acs = a._.cases.filter(c=>c.isAsync); // 非同期系テストケース一覧
+        //const acs = a._.cases.filter(c=>c.isAsync); // 非同期系テストケース一覧
+        const acs = this._.a._.cases.filter(c=>c.isAsync); // 非同期系テストケース一覧
         acs.map(c=>c.statusCode=3); // 非同期テストは保留状態にする
         //if (0<acs.length) {this._.rl.syncs();} // 同期系テスト結果ログ表示
         //if (0<acs.length) {this._.result.syncs();} // 同期系テスト結果ログ表示
@@ -112,10 +116,13 @@ class Unitest {
     }
     #show() {}
     #case(c) {// c:testCaseObject。cにstacksを追加したりコンソール表示したりする。
+        //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         try {c.actual = c.test(); isB(c.expected) ? this.#posTry(c) : this.#negTry(c);}
         catch (e) {isB(c.expected) ? this.#posCatch(c,e) : this.#negCatch(c,e);}
     }
     #posTry(c) {
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         if (c.expected===c.actual) {c.statusCode=0} // succeed
         else {
             c.statusCode=1; // Failed
@@ -125,18 +132,24 @@ class Unitest {
         }
     }
     #posCatch(c, e) {
+        //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         c.statusCode=2; // Exception
         c = {...c, ...this.#makeStacks(AssertError, `テスト例外。真偽値が期待される所で例外発生しました。`, e)};
         if (c.notFn) {c.codeStr = this._.tcs.get(c);}
         Console.exception(c);
     }
     #negTry(c) {
+        //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         c.statusCode=1; // Failed
         c = {...c, ...this.#makeStacks(AssertError, `テスト失敗。例外発生が期待される所で発生しなかった。`)};
         if (c.notFn) {c.codeStr = this._.tcs.get(c);}
         Console.fail(c);
     }
     #negCatch(c, e) {
+        //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         const isFailedType = e.constructor.name !== c.expected.type.name;
         const isFailedMsg = undefined===c.expected.msg
             ? false
@@ -152,6 +165,8 @@ class Unitest {
         }
     }
     #getNegCatchMsg(c, e, isFailedType, isFailedMsg) {
+        //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
+//        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         const i = (isFailedMsg << 1) | isFailedType
         const msg = ['','型が','メッセージが','型もメッセージも'][i];
         const E = [c.expected.type.name, c.expected.msg];
@@ -642,8 +657,13 @@ class ResultHtml {
         return tr;
     }
     //#makeProblemTrsHtml(cases) {cases.map(c=>this.#makeProblemTrHtml(c)).join('')}
-    #makeProblemTrsHtml(name,status) {this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).map(c=>this.#makeProblemTrHtml(c)).join('')}
-    #makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
+    //#makeProblemTrsHtml(name,status) {this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).map(c=>this.#makeProblemTrHtml(c)).join('')}
+    #makeProblemTrsHtml(name,status) {
+        const records = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode));
+        return 0===records.length ? '' : records.map(c=>this.#makeProblemTrHtml(c)).join('\n');
+    }
+    #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
+    //#makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
 }
 class Result {
     //constructor(a) {this._={a:a, log:new ResultLog(a), html:new ResultHtml(a), status:{syncs:null, asyncs:null, all:null}}}
