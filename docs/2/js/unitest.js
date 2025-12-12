@@ -357,15 +357,16 @@ class AssertStatus {
     get asyncs() {return this.#gets('asyncs', this.#asyncCases)}
     get all() {return this.#gets('all', this.#allCases)}
     #gets(name, cases) {
-        console.log(`AssertStatus#gets(name, cases):`, name, cases);
+//        console.log(`AssertStatus#gets(name, cases):`, name, cases);
         if (null!==this._.status[name]) {return this._.status[name]} // 一度だけ算出する。以降の参照は使いまわし。
+        //const P = 'syncs'===name ? this._.a._.cases.filter(c=>c.isAsync).length : cases.filter(c=>3===c.statusCode).length, // 保留 Pending
         const P = cases.filter(c=>3===c.statusCode).length, // 保留 Pending
               E = cases.filter(c=>2===c.statusCode).length, // 例外 Exception
               F = cases.filter(c=>1===c.statusCode).length, // 失敗 Failed
               S = cases.filter(c=>0===c.statusCode).length, // 成功 Succeed
               A = E+F+S+('syncs'===name ? 0 : P),           // 全件 All（syncsの時だけPを除外する）
               R = (S/A);                                    // 比率 Rate (0〜1)
-        this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('sync'===name ? '同期テストのみ' : ('async'===name) ? '非同期テストのみ' : '全テスト完了')});
+        this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('syncs'===name ? '同期テストのみ' : ('asyncs'===name) ? '非同期テストのみ' : '全テスト完了')});
         return this._.status[name];
         //return (this._.status[name] = ({pending:P, exception:E, fail:F, success:S, all:A, rate:R, percent:`${(R*100).toFixed(0)}%`, name:('sync'===name ? '同期テストのみ' : ('async'===name) ? '非同期テストのみ' : '全テスト完了')}));
     }
@@ -442,7 +443,7 @@ class ResultLog {
     #getPs(name, status) {
         const R = '100%'===status.percent ? 'success' : 'pending';
         //console.log(name, status, AssertStatus.getLabel(name));
-        console.log(name, status instanceof AssertStatus, status, status.syncs);
+        console.log(name, status instanceof AssertStatus, status, status[name]);
         return [[`${status[name].name} ${status[name].percent} ${status[name].all}`, R], ...'pending exception fail success'.split(' ').map(n=>[`${Status[n].label}:${status[name][n]}`, n])].map(ln=>this.#getP(...ln))
     }
     #getP(label, n){return ({label:label, format:`background-color:${Status[n].color.b};color:${Status[n].color.f};`});}
@@ -500,18 +501,34 @@ class ResultHtml {
         if (this._.el.success) {this._.el.success.display = 'none'}
         this._.el.throw.innerHTML = `<p>${e.message}</p><br><p>${e.stack.split('\n').join('<br>')}</p>`;
     }
-    syncs(status) {this.#update('syncs', status)}
-    asyncs(status) {this.#update('asyncs', status)}
+    //syncs(status) {this.#update('syncs', status)}
+    syncs(status) {this.#makeSuccessEl(status);}
+    //asyncs(status) {this.#update('asyncs', status)}
+    asyncs(status) {/*this.#update('asyncs', status)*/}
     all(status) {this.#update('all', status)}
     #makeRootEl() {
         'root throw success'.split(' ').map(n=>{
             this._.el[n] = document.createElement('div')
             this._.el[n].id = `${this._.id}${'root'===n ? '' : '-'+n}`;
         });
+        'count problem'.split(' ').map(n=>{
+            this._.el[n] = document.createElement('table')
+            this._.el[n].id = `${this._.id}-${n}`;
+        });
+        this._.el.success.append(...('count problem'.split(' ').map(n=>this._.el[n])));
+        this._.el.root.append(this.#makeStyleEl(), ...('throw success'.split(' ').map(n=>this._.el[n])));
+        document.body.appendChild(this._.el.root);
+        /*
         this._.el.root.appendChild(this.#makeStyleEl());
-        this.#makeCountTableHtml({pending:0, exception:0, fail:0, success:0, all:0, name:'', percent:'0%'}); // status
+        this._.el.count = document.createElement('table');
+        this._.el.problem = document.createElement('table');
+        this._.el.root.success.append();
+        this._.el.root.success.append();
+//        this.#makeCountTableHtml({pending:0, exception:0, fail:0, success:0, all:0, name:'', percent:'0%'}); // status
+        */
     }
     #update(name, status) {// name:工程名, status:保留,例外,失敗,成功の数
+        console.log('ResultHtml.#update():', name, status);
         this.#updateCountTable(name, status);
         this.#updateProblemTable(name, status);
     }
@@ -519,9 +536,10 @@ class ResultHtml {
         // 結果の要約は<p>に出力したい。tbodyだと長くなりテーブルが見づらくなるから。
 //        this._.el.count.querySelector(`thead`).textContent = `${status.name} ${status.percent} ${status.all}`;
 //        this._.el.count.querySelector(`thead`).className = `${'100%'===status.percent ? 'success' : 'pending'}`;
+        console.log(name, status);
         StatusCodeOfNames.toReversed().map(n=>{
-            this._.el.count.querySelector(`#${n}-count`).textContent=`${status[n]}`; // テスト結果件数を更新する
-            this._.el.count.querySelector(`tr.${n}`).style.display = (0===status[n] ? 'none' : 'table-row'); // 件数が0の行を非表示にする
+            this._.el.count.querySelector(`#${n}-count`).textContent=`${status[name][n]}`; // テスト結果件数を更新する
+            this._.el.count.querySelector(`tr.${n}`).style.display = (0===status[name][n] ? 'none' : 'table-row'); // 件数が0の行を非表示にする
         });
     }
     #updateProblemTable(name, status) {// name:工程名, status:保留,例外,失敗,成功の数
@@ -537,14 +555,19 @@ class ResultHtml {
             this._.el.problem.appendChild(table);
             status[name]
         } else {// 更新（追加＆並替）
+            // 非同期テスト結果を追加挿入する
+            this._.el.contentVisiblity = 'hidden';
             const table = document.querySelector(`#${this._.id}-problem`);
-            for (let c of status.asyncStatuses.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
+            //for (let c of status.asyncStatuses.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
+            for (let c of this._.a._.cases.filter(c=>c.isAsync && [1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
                 // 任意の位置に挿入する
             }
+            this._.el.contentVisiblity = 'auto';
         }
 //        this.#makeTableHtml(status);
     }
     #makeSuccessEl(status) {
+        /*
         if (!this._.el.count) {
             'count problem'.split(' ').map(n=>{
                 const div = document.createElement('div');
@@ -555,6 +578,9 @@ class ResultHtml {
             this._.el.count.innerHTML = `${this.#makeCountTableHtml(status)}`;
             this._.el.problem.innerHTML = `${this.#makeProblemAreaTableHtml(status)}`;
         }
+        */
+        this._.el.count.innerHTML = `${this.#makeCountTableHtml('syncs', status)}`;
+        this._.el.problem.innerHTML = `${this.#makeProblemAreaTableHtml('syncs', status)}`;
         // ToDo: countは保留など0件のtrを非表示にする。件数を更新する。
         // ToDo: problemは作り直す（同期のみ、非同期のみ、全件では、同期のみ→全件の二段階更新であり、二回目は追加だけが行われうるのであり削除や変更は起きないはず）
         /*
@@ -576,18 +602,24 @@ class ResultHtml {
     /*
     */
     //#makeStyleCss() {return `<style id="${this._.id}-style">${StatusCodeOfNames.map(n=>`.${n} {background-color:${Status[n].color.b}; color:${Status[n].color.b}; }`).join('\n')}</style>`;}
-    #makeStyleCss() {return `<style id="${this._.id}-style">table{border-collapse:collapse;}${StatusCodeOfNames.map(n=>`.${n} {background-color:${Status[n].color.b}; color:${Status[n].color.b}; }`).join('\n')}</style>`;}
+    #makeStyleCss() {return `<style id="${this._.id}-style">table{border-collapse:collapse; border-spacing:0;}td,th{padding:0.25em;}${StatusCodeOfNames.map(n=>`.${n} {background-color:${Status[n].color.b}; color:${Status[n].color.f}; }`).join('\n')}</style>`;}
+
+
 //    #${this._id} td:nth-child(2) { text-align: right; }
 //    #makeCountTable(a) {if (!this._.el) {this._.el = document.body.innerHTML = ;}}
     //#makeCountTableHtml(status) {return `<table id="${this._.id}-count">${this.#makeCountTrsHtml(status)}<table>`;}
-    #makeCountTableHtml(status) {return `<table id="${this._.id}-count">${this.#makeCountTrsHtml(status)}<table>`;}
+    #makeCountTableHtml(name,status) {return `<table id="${this._.id}-count">${this.#makeCountTrsHtml(name,status)}<table>`;}
     //#makeCountTrHtml(statusCode, num) {const N=StatusCodeOfNames[statusCode];return `<tr class="${N}"><th>${Status[N].name}</th><td id="${N}-count">${num}</td></tr>`}
-    #makeCountTrsHtml(status) {return StatusCodeOfNames.toReversed().map(n=>this.#makeCountTrHtml(n, status[n])).join('')}
+    //#makeCountTrsHtml(status) {return StatusCodeOfNames.toReversed().map(n=>this.#makeCountTrHtml(n, status.all[n])).join('')}
+    #makeCountTrsHtml(name,status) {return StatusCodeOfNames.toReversed().map(n=>this.#makeCountTrHtml(n, status[name][n])).join('')}
     #makeCountTrHtml(statusName, num) {const N=statusName;return `<tr class="${N}"><th>${Status[N].label}</th><td id="${N}-count">${num}</td></tr>`}
-    #makeProblemAreaTableHtml(status) {return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;}
-    #makeProblemAreaTable(status) {
+    //#makeProblemAreaTableHtml(status) {return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;}
+    #makeProblemAreaTableHtml(name,status) {return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(name,status)}<table>`;}
+    #makeProblemAreaTable(name,status) {
         const cases = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)); // 失敗か例外のテストケースのみ取得する
-        return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;
+//        const cases = status[name].filter(c=>[1,2].some(v=>v===c.statusCode)); // 失敗か例外のテストケースのみ取得する
+        //return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;
+        return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml()}<table>`;
     }
     #makeProblemThTrEl() {
         const tr = document.createElement('tr');
@@ -609,8 +641,9 @@ class ResultHtml {
         tr.append(td0, td1);
         return tr;
     }
-    #makeProblemTrsHtml(cases) {cases.map(c=>this.#makeProblemTrHtml(c)).join('')}
-    #makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks.join('<br>')}</td></tr>`}
+    //#makeProblemTrsHtml(cases) {cases.map(c=>this.#makeProblemTrHtml(c)).join('')}
+    #makeProblemTrsHtml(name,status) {this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).map(c=>this.#makeProblemTrHtml(c)).join('')}
+    #makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
 }
 class Result {
     //constructor(a) {this._={a:a, log:new ResultLog(a), html:new ResultHtml(a), status:{syncs:null, asyncs:null, all:null}}}
