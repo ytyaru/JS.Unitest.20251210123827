@@ -100,6 +100,7 @@ class Unitest {
                     if ('fulfilled'===results[i].status) {this.#negTry(c)}
                     else {this.#negCatch(c, results[i].reason)}
                 }
+//                this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};
             }
 //            // 結果をログ表示する
 //            if (0<results.length) {this._.rl.asyncs();}
@@ -120,6 +121,7 @@ class Unitest {
 //        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
         try {c.actual = c.test(); isB(c.expected) ? this.#posTry(c) : this.#negTry(c);}
         catch (e) {isB(c.expected) ? this.#posCatch(c,e) : this.#negCatch(c,e);}
+//        finally {this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};}
     }
     #posTry(c) {
 //        c = this._.a._.cases[this._.a._.cases.findIndex(C=>C.id===c.id)];
@@ -130,6 +132,7 @@ class Unitest {
             if (c.notFn) {c.codeStr = this._.tcs.get(c);}
             Console.fail(c);
         }
+        this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};
     }
     #posCatch(c, e) {
         //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
@@ -138,6 +141,7 @@ class Unitest {
         c = {...c, ...this.#makeStacks(AssertError, `テスト例外。真偽値が期待される所で例外発生しました。`, e)};
         if (c.notFn) {c.codeStr = this._.tcs.get(c);}
         Console.exception(c);
+        this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};
     }
     #negTry(c) {
         //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
@@ -146,6 +150,7 @@ class Unitest {
         c = {...c, ...this.#makeStacks(AssertError, `テスト失敗。例外発生が期待される所で発生しなかった。`)};
         if (c.notFn) {c.codeStr = this._.tcs.get(c);}
         Console.fail(c);
+        this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};
     }
     #negCatch(c, e) {
         //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
@@ -163,6 +168,7 @@ class Unitest {
             c = {...c, ...this.#makeStacks(AssertError, msg, e)};
             Console.fail(c);
         }
+        this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)] = {...this._.a._.cases[this._.a._.cases.findIndex(v=>v.id===c.id)], ...c};
     }
     #getNegCatchMsg(c, e, isFailedType, isFailedMsg) {
         //c = this._.a._.cases.filter(C=>C.id===c.id)[0];
@@ -558,7 +564,24 @@ class ResultHtml {
         });
     }
     #updateProblemTable(name, status) {// name:工程名, status:保留,例外,失敗,成功の数
+        // 非同期テスト結果を追加挿入する
+        this._.el.contentVisiblity = 'hidden';
+        //const table = document.querySelector(`#${this._.id}-problem`);
+//        const table = document.querySelector(`#${this._.id}-problem`);
+        const tbody = document.querySelector(`#${this._.id}-problem tbody`);
+        const trs = [...tbody.querySelectorAll(`tr`)];
+//        const tblIds = [...this._.el.problem.querySelectorAll(`tr`)].map(tr=>parseInt(tr.dataset.id));
+        //for (let c of status.asyncStatuses.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
+        for (let c of this._.a._.cases.filter(c=>c.isAsync && [1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
+            const conds = trs.filter(tr=>c.id < parseInt(tr.dataset.id)).sort(); // 挿入先候補
+            const tr = this.#makeProblemTdTrEl(c); // 追加するtr
+            if (0===conds.length) {tbody.appendChild(tr)} else {conds[0].before(tr)}
+        }
+        this._.el.contentVisiblity = 'auto';
+
+
         if (!this._.el.problem) { // 新規作成
+            /*
             const table = document.createElmenet('table');
             table.id = `${this._.id}-problem`;
 //        return `<table id="${this._.id}-problem">${this.#makeProblemThHtml()}${this.#makeProblemTrsHtml(cases)}<table>`;
@@ -569,15 +592,29 @@ class ResultHtml {
             }
             this._.el.problem.appendChild(table);
             status[name]
+            */
         } else {// 更新（追加＆並替）
+            /*
             // 非同期テスト結果を追加挿入する
             this._.el.contentVisiblity = 'hidden';
+            //const table = document.querySelector(`#${this._.id}-problem`);
             const table = document.querySelector(`#${this._.id}-problem`);
+            const tblIds = [...this._.el.problem.querySelectorAll(`tr`)].map(tr=>parseInt(tr.dataset.id));
             //for (let c of status.asyncStatuses.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
             for (let c of this._.a._.cases.filter(c=>c.isAsync && [1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id)) {
+                const tr = this.#makeProblemTdTrEl(c);
+                const ovIdx = tblIds.findIndex(id=>c.id < id); // 追加対象より大きいIDがあるidx
+                const ovTr = table.querySelector(`tr:nth-of-type(${ovIdx+1})`);
+                console.assert(!!ovTr);
+//                console.log(c.id, ovIdx);
+                // 挿入する（対象より大きいIDを持つレコードの直前ｎ挿入する。なければ末尾に挿入する）
+                if (-1===ovIdx) {table.appendChild(tr);} else {ovTr.before(tr)}
+//                this._.el.problem.querySelector(`tr[data-id="${}"]`);
                 // 任意の位置に挿入する
+//                this._.el.problem
             }
             this._.el.contentVisiblity = 'auto';
+            */
         }
 //        this.#makeTableHtml(status);
     }
@@ -645,24 +682,31 @@ class ResultHtml {
         })));
         return tr;
     }
-    #makeProblemThHtml() {return `<tr><th>要約</th><th>追跡</th></tr>`}
+    #makeProblemThHtml() {return `<tr><th>要約</th><th>箇所</th><th>追跡</th></tr>`}
     #makeProblemTdTrEl(c) {
         const tr = document.createElement('tr');
+        //tr.className = `${StatusCodeOfNames[c.statusCode]}`;
+        //tr.dataset.id = `${c.id}`;
+        tr.className = StatusCodeOfNames[c.statusCode];
+        tr.dataset.id = c.id;
         const td0 = document.createElement('td');
         const td1 = document.createElement('td');
+        const td2 = document.createElement('td');
         td0.className = ``;
         td0.textContent= c.msg.split('\n').join('<br>');
-        td1.textContent = c.stacks.join('<br>');
-        tr.append(td0, td1);
+        td1.textContent = `対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}`;
+        td2.textContent = c.stacks.join('<br>');
+        tr.append(td0, td1, td2);
         return tr;
     }
     //#makeProblemTrsHtml(cases) {cases.map(c=>this.#makeProblemTrHtml(c)).join('')}
     //#makeProblemTrsHtml(name,status) {this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).map(c=>this.#makeProblemTrHtml(c)).join('')}
     #makeProblemTrsHtml(name,status) {
-        const records = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode));
+        //const records = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode));
+        const records = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id);
         return 0===records.length ? '' : records.map(c=>this.#makeProblemTrHtml(c)).join('\n');
     }
-    #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
+    #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
     //#makeProblemTrHtml(c) {return `<tr class="${StatusCodeOfNames[c.statusCode]}"><td>${c.msg}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
 }
 class Result {
