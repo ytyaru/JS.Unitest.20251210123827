@@ -693,9 +693,9 @@ class ResultHtml {
         const td1 = document.createElement('td');
         const td2 = document.createElement('td');
         td0.className = ``;
-        td0.textContent= c.msg.split('\n').join('<br>');
-        td1.textContent = `対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}`;
-        td2.textContent = c.stacks.join('<br>');
+        td0.innerHTML = c.msg.split('\n').join('<br>');
+        td1.innerHTML = `対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}`;
+        td2.innerHTML = c.stacks.join('<br>');
         tr.append(td0, td1, td2);
         return tr;
     }
