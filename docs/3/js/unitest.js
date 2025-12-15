@@ -51,16 +51,74 @@ const isSafeInt = (v)=>Number.isSafeInteger(v),
 const StatusCodeOfNames = ['success', 'fail', 'exception', 'pending'];
 class Unitest {
     constructor() {
-        this._ = {st:new StackTracer(), fn:null, tcs:null, rl:null, a:null};
+        this._ = {st:new StackTracer(), fn:null, tcs:null, rl:null, a:null, scripts:[]};
     }
     assert(fn) {
-        const a = new Assertion();
-        this._.a = a;
-        this._.tcs = new TestCodeStr(fn);
-        this.#define(a, fn); // テストケースの定義
-        this.#test(a);       // テストケースの実行
-        this.#show(a);       // テストケースの表示
+        try {
+            const a = new Assertion();
+            this._.result = new Result(a);
+            this._.a = a;
+            this._.tcs = new TestCodeStr(fn);
+            this.#define(a, fn); // テストケースの定義
+            this.#test(a);       // テストケースの実行
+            this.#show(a);       // テストケースの表示
+        } catch(e) {this._.result.throw(e);}
     }
+    test(...args) {// (a)=>{} / 'target.js', (a)=>{} / 'tar1.js','tar2.js',(a)=>{}
+        let [paths, fn] = [null, null];
+        try {
+            if (0===args.length) {throw new TestError(`unitest.test()の引数はテストコードを定義する式を渡す必要があります。その前に任意でテスト対象のJSファイルパスを渡せます。\n((a)=>{a.t(true)})\n('target.js', (a)=>{a.t(true)})\n('tar1.js', 'tar2.js', 'tar3.js', (a)=>{a.t(true)})`)}
+            fn = args.at(-1);
+            if (!isFn(fn)) {throw new TestError(`unitest.test()の最後の引数はテストコードを定義する式であるべきです。例: (a)={a.t(true); a.f(false); a.e(Error, 'msg', ()=>new Error('msg'));}`)}
+            paths = args.slice(0, -1);
+            this.unloadScripts();
+//            if (0<paths.length) {this.#loadScript(paths)}
+        } catch(e) {this._.result.throw(e);} // unitest.test()呼び出しで例外発生
+        Promise.all(paths.map(path=>this.#loadScript(path)))
+        .then(scripts=>{
+            console.log(scripts);
+            try {
+                const a = new Assertion();
+                this._.result = new Result(a);
+                this._.a = a;
+                // ToDo:対象ファイル表示
+                this._.result.target(scripts);
+                // テスト実行
+                this._.tcs = new TestCodeStr(fn);
+                this.#define(a, fn); // テストケースの定義
+                this.#test(a);       // テストケースの実行
+                this.#show(a);       // テストケースの表示
+            } catch(e) {this._.result.throw(e);} // テストケースの定義で例外発生／この実装内で例外発生
+        }).catch(e=>this._.result.throw(e)); // 指定ファイルが存在しない
+    }
+    async #loadScripts(...paths) {
+        for await (let path of paths) {this.#loadScript(path)}
+    }
+    #loadScript(path) { return new Promise((resolve, reject) => {
+        // 1. 新しい script タグを作成する
+        const script = document.createElement('script');
+        script.src = path;
+        //script.src = src;
+//        script.async = true; // 可能であれば非同期で読み込む設定
+
+        // 2. 読み込み成功時のイベントリスナー
+        script.onload = () => {
+            console.log(`スクリプト ${path} が正常に読み込まれました。`);
+            this._.scripts.push(script);
+            resolve(script); // Promiseを解決する
+        };
+
+        // 3. 読み込み失敗時のイベントリスナー
+        script.onerror = () => {
+            const error = new Error(`スクリプト ${path} の読み込みに失敗しました。`);
+            console.error(error.message);
+            reject(error); // Promiseを拒否する
+        };
+
+        // 4. スクリプトをドキュメントの head または body に追加して読み込みを開始する
+        document.head.appendChild(script);
+    });}
+    unloadScripts() {for (let script of this._.scripts) {script.remove()} this._.scripts.length = 0;}
     #define(a, fn) {
         this._.fn = fn; // テストコード定義関数(エラー箇所表示用)
         const example = `(a)={a.t(true); a.f(false); a.e(Error, 'msg', ()=>new Error('msg'));}`;
@@ -374,6 +432,8 @@ class ResultLog {
     constructor(a) {
         this._ = {a:a, syncs:{P:0, S:0, F:0, E:0}, asyncs:{S:0, F:0, E:0}, all:{S:0, F:0, E:0}};
     }
+    target(scripts) {console.log(scripts);if (Array.isArray(scripts) && 0<scripts.length) {console.log(`テスト対象:`, scripts.at(-1).src); scripts.slice(0, -1).map(script=>console.log(`依存コード:`, script.src))}}
+    throw(e) {console.error(e)}
     syncs(status) {if (0 < this._.a._asyncs.length){this.#log(this.#getPs('syncs', status))}}
     asyncs(status) {if (0 < this._.a._asyncs.length){this.#log(this.#getPs('asyncs', status))}}
     all(status) {this.#log(this.#getPs('all', status))}
@@ -397,6 +457,57 @@ class ResultHtml {
         if (this._.el.success) {this._.el.success.display = 'none'}
         this._.el.throw.innerHTML = `<p>${e.message}</p><br><p>${e.stack.split('\n').join('<br>')}</p>`;
     }
+    target(scripts) {
+        if (1 < scripts.length) {// <ul><li>依存ファイル名1<li><li>依存ファイル名2<li></ul>
+            if (this._.el.root.querySelector('#dependence-files')) {
+                this._.el.root.querySelector('#dependence-files').remove();
+            }
+            const dependences = scripts.slice(0, -1).map(script=>{
+                const a = document.createElement('a');
+                a.id = `target-file`
+                //a.setAttribute('target', '_blank');
+                a.setAttribute('target', script.src);
+                a.setAttribute('rel', 'noopener noreferrer');
+                a.setAttribute('href', script.src);
+                a.textContent = script.src.substring(script.src.lastIndexOf('/') + 1);
+                return a;
+            });
+            const ul = document.createElement('ul');
+            ul.id = `dependence-files`;
+            dependences.map(a=>{
+                const li = document.createElement('li');
+                li.appendChild(a);
+                ul.appendChild(li);
+            });
+            this._.el.root.prepend(ul);
+        }
+        if (0 < scripts.length) {// <h1>テスト対象ファイル名 単体試験</h1>
+            if (this._.el.root.querySelector('#target-file')) {
+                const a = document.querySelector('#target-file');
+                a.setAttribute('target', script.src);
+                a.setAttribute('href', script.src);
+                a.textContent = script.src.substring(script.src.lastIndexOf('/') + 1);
+            } else {
+                const script = scripts.at(-1);
+                const a = document.createElement('a');
+                a.id = `target-file`
+                //a.setAttribute('target', '_blank');
+                a.setAttribute('target', script.src);
+                a.setAttribute('rel', 'noopener noreferrer');
+                a.setAttribute('href', script.src);
+                a.textContent = script.src.substring(script.src.lastIndexOf('/') + 1);
+                const h1 = document.createElement('h1');
+//                h1.appendChild(a);
+//                h1.appendChild(` 単体試験`);
+                const percent = document.createElement('span');
+                percent.id = `unitest-percent`;
+                const allCount = document.createElement('span');
+                allCount.id = `unitest-all-count`;
+                h1.append(`単体試験 `, a, ' ', percent, ' ', allCount);
+                this._.el.root.prepend(h1);
+            }
+        }
+    }
     syncs(status) {this.#makeSuccessEl(status);}
     asyncs(status) {/*this.#update('asyncs', status)*/}
     all(status) {this.#update('all', status)}
@@ -417,6 +528,15 @@ class ResultHtml {
         console.log('ResultHtml.#update():', name, status);
         this.#updateCountTable(name, status);
         this.#updateProblemTable(name, status);
+        this.#updateSummary();
+    }
+    #updateSummary() {// 最終合否率＆件数
+        const percent = document.querySelector(`#unitest-percent`);
+        const allCount = document.querySelector(`#unitest-all-count`);
+        const S = '100%'===status.all.percent ? 'success' : 'pending';
+        const C = AssertStatus.getColor(S);
+        if (percent) {percent.style.backgroundColor = C.b; percent.style.color = C.f; percent.textContent = `${status.all.percent}`}
+        if (allCount) {allCount.style.backgroundColor = C.b; allCount.style.color = C.f; allCount.textContent = `${status.all.all}件`}
     }
     #updateCountTable(name, status) {// name:工程名, status:保留,例外,失敗,成功の数
         // 結果の要約は<p>に出力したい。tbodyだと長くなりテーブルが見づらくなるから。
@@ -495,28 +615,39 @@ class ResultHtml {
     
     #stackTrace(c) {
         const stacks = [];
-        if (c.notFn && c.traces) {stacks.push(c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME))[0])}   // テストコード定義箇所
+        const traces = c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME));
+        if (c.notFn && c.traces) {stacks.push(traces[0])}   // テストコード定義箇所
         if (c.stacks) {stacks.push(...c.stacks.filter(v=>v))} // 例外発生箇所
 //        const stacks = c.stacks ? [...c.stacks].filter(v=>v) : [];
         if (c.error) {// 例外発生の歴史を辿る
+            const A = [];
             let cause = c.error.cause;
             console.log(`#stackTrace(c):`, c.error, cause);
             while (cause) {
                 console.log(`caused by:`, cause.constructor.name, cause.message, [cause.stack.split('\n')]);
                 //stacks.push(cause.constructor.name, cause.message, ...[cause.stack.split('\n')]);
                 //stacks.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...[cause.stack.split('\n')]);
-                stacks.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...cause.stack.split('\n'));
+                //stacks.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...cause.stack.split('\n'));
+                A.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...cause.stack.split('\n'));
                 cause = cause.cause;
+            }
+            if (0<A.length) {
+                stacks.length = 0;
+                stacks.push(...A);
             }
         }
         console.log(`location.pathname:`, location.pathname); // /tmp/work/JS.Unitest.20251210123827/docs/3/index.html
         console.log(`c.id:`, c.id, `c.notFn:`, c.notFn, `c.traces:`, c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME)), `stacks:`, stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)), `c:`, c);
+
+        if (!stacks.some(v=>-1<v.indexOf(traces[0]))) {stacks.unshift(traces[0])} // テストコード定義箇所を追記する
         //return stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)).join('<br>');
         return stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)).map(v=>v.replaceAll(ROOT_DIR_PATH,'(略)')).join('<br>');
     }
 }
 class Result {
     constructor(a) {this._={a:a, log:new ResultLog(a), html:new ResultHtml(a), status:new AssertStatus(a)}}
+    throw(e) {this._.log.throw(e); this._.html.throw(e);}
+    target(scripts) {this._.log.target(scripts); this._.html.target(scripts);}
     syncs() {this.#run('syncs')}
     asyncs() {this.#run('asyncs')}
     all() {this.#run('all')}

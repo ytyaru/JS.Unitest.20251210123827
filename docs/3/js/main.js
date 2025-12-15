@@ -1,5 +1,7 @@
 window.addEventListener('DOMContentLoaded', (event) => {
-    unitest.assert((a)=>{
+//    unitest.assert();
+//    unitest.test();
+    unitest.test('js/human.js', (a)=>{
         // 期待値:true
     //    a.t(false);
     //    a.t(()=>{throw new Error(`なんかエラー`)}); // 例外
