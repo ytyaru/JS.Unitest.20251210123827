@@ -94,9 +94,54 @@ class Unitest {
     async #loadScripts(...paths) {
         for await (let path of paths) {this.#loadScript(path)}
     }
+
+    #getAbsPath(path) {// 絶対パスを取得する
+        if (!('string'===typeof path && 0<path.length)) {throw new TypeError(`pathは1字以上の文字列であるべきです。`)}
+        // '': HTMLファイルと同じ階層
+        // '/': HTTPドメイン
+        // './': HTMLファイルと同じ階層
+        // '../': HTMLファイルがある階層の一つ前のディレクトリ
+        // 'https://': HTTPS絶対パス
+        // 以下は有効でないsrc値である。
+        // 'file://': FILE絶対パス
+        // 'C:\': Windowsにおけるファイルシステム上の絶対パス
+        // '/': Linuxにおけるファイルシステム上の絶対パス
+        const parentNum = this.#countRelativePathParents(path);
+        /*
+        '/'
+            ? `${window.location.protocol}://${window.location.hostname}`
+            : ('./'
+                ? './'を削除したパス
+                : ('../'
+                    ? いくつか前に戻った時のパス
+                    : そのままの文字列
+                ));
+        */
+        // 相対パスプレフィクス('/', './', '../../')を削除したパス文字列
+        let flatPath = path;
+        while (['/', './', '../'].some(v=>flatPath.startsWith(v))) {
+            flatPath = flatPath.replace(/^(\/|\.\/|\.\.\/)/, '');
+        }
+
+        /*
+        const domain = `${window.location.protocol}://${window.location.hostname}`;
+        const absDirPath = '/'===path[0]
+            ? `${domain}${path}`
+            : path.startsWith('./')
+                ? path.slice(2);
+                : path.startsWith('../')
+                    ? path.split('/').slice(0, parentNum*-1)
+                    : path;
+        const absDirPath = THIS_DIR_PATH.split('/').slice(0, parentNum*-1);
+        if (0 < parentNum) {
+        }
+        if (path.startsWith('../')) {}
+        */
+    }
     #loadScript(path) { return new Promise((resolve, reject) => {
         // 1. 新しい script タグを作成する
         const script = document.createElement('script');
+
         script.src = path;
         //script.src = src;
 //        script.async = true; // 可能であれば非同期で読み込む設定
@@ -118,6 +163,10 @@ class Unitest {
         // 4. スクリプトをドキュメントの head または body に追加して読み込みを開始する
         document.head.appendChild(script);
     });}
+    #countRelativePathParents(path) {// ../../some/file.js のような文字列から ../ の数を返す。例なら2
+        const match = path.match(/^(\.\.\/)+/);
+        return match ? match[0].length / 3 : 0;
+    }
     unloadScripts() {for (let script of this._.scripts) {script.remove()} this._.scripts.length = 0;}
     #define(a, fn) {
         this._.fn = fn; // テストコード定義関数(エラー箇所表示用)
@@ -528,9 +577,9 @@ class ResultHtml {
         console.log('ResultHtml.#update():', name, status);
         this.#updateCountTable(name, status);
         this.#updateProblemTable(name, status);
-        this.#updateSummary();
+        this.#updateSummary(name, status);
     }
-    #updateSummary() {// 最終合否率＆件数
+    #updateSummary(name, status) {// 最終合否率＆件数
         const percent = document.querySelector(`#unitest-percent`);
         const allCount = document.querySelector(`#unitest-all-count`);
         const S = '100%'===status.all.percent ? 'success' : 'pending';
@@ -612,7 +661,26 @@ class ResultHtml {
     }
     #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${this.#stackTrace(c)}</td></tr>`}
     //#makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
-    
+    #getTestCodeStr(c) {
+        /*
+        // 相対パスプレフィクス('/', './', '../../')を削除したパス文字列
+        let flatPath = path;
+        while (['/', './', '../'].some(v=>flatPath.startsWith(v))) {
+            flatPath = flatPath.replace(/^(\/|\.\/|\.\.\/)/, '');
+        }
+
+
+
+
+        const relativePath = c.stacks[0].substring(c.stacks[0].lastIndexOf(THIS_DIR_NAME) + 1); // index.htmlがあるディレクトリパスからの相対パス
+        const fileNameRC = c.stacks[0].substring(THIS_FILE_PATH.lastIndexOf('/') + 1); // [ファイル名]:[行]:[列] この書式は他のブラウザだと異なる場合がある
+        const fileName = fileNameRC.substring(0, fileNameRC.lastIndexOf('.js')); // ファイル名だけを取得する
+        THIS_DIR_NAME 
+THIS_FILE_NAME 
+const THIS_FILE_NAME = THIS_FILE_PATH.substring(THIS_FILE_PATH.lastIndexOf('/') + 1) ?? 'unitest.js:';
+        this._.scripts.filter(script=>script.src.indexOf());
+        */
+    }
     #stackTrace(c) {
         const stacks = [];
         const traces = c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME));
