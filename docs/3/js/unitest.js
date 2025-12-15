@@ -23,7 +23,11 @@ Unitest.assert((a)=>{
 });
 </script>
 */
-const THIS_FILE = 'unitest.js:';
+//const ROOT_FILE_PATH = location.pathname; // 呼出元HTMLファイルのフルパス。/tmp/work/JS.Unitest.20251210123827/docs/3/index.html
+const ROOT_FILE_PATH = location.href; // 呼出元HTMLファイルのフルパス。file:///tmp/work/JS.Unitest.20251210123827/docs/3/index.html
+const ROOT_DIR_PATH = ROOT_FILE_PATH.substring(0, ROOT_FILE_PATH.lastIndexOf('/')); // 呼出元HTMLファイルが存在するディレクトリ絶対パス
+const THIS_FILE_PATH = document.currentScript.src; // index.html <scrpt src="THIS">
+const THIS_FILE_NAME = THIS_FILE_PATH.substring(THIS_FILE_PATH.lastIndexOf('/') + 1) ?? 'unitest.js:';
 class TestError extends Error {
     constructor(msg, cause) {
         undefined===cause ? super(msg) : super(msg, {cause,cause});
@@ -262,6 +266,7 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
             test: isFn(L) ? L : ()=>args[0],
             isAsync:0===args.length ? false : isAFn(L),
             notFn: (isB(expected) && 1===args.length && isB(L)),
+            traces: (new Error('スタックトレースを取得')).stack.split('\n'),
          });}
         // tc(),fc(),ec()のような複数の引数パターンを持つ方法も追加したい
         // cls(),ins(),m(),fn(),test()のようなクラス、インスタンス、メソッド、関数のテストコードを短縮表現できるメソッドも追加したい。
@@ -343,7 +348,7 @@ class StackTracer {
     #delStacks(stacks) {
         const s = Array.isArray(stacks) ? stacks : (isS(stacks) ? stacks.split('\n') : null)
         if (null===s) { throw new AssertError(`内部エラー。#delStacksの引数は文字列かその配列であるべきです。`, 'exception') }
-        return s.filter(line=>-1===line.indexOf(THIS_FILE))
+        return s.filter(line=>-1===line.indexOf(THIS_FILE_NAME))
     }
     __isGenealogy(a, e) { // aがeの系譜（同一または子孫クラス）であれば真を返す
         if (a instanceof e || a.constructor.name === e.constructor.name) { return true }
@@ -355,7 +360,7 @@ class StackTracer {
         const stack = error.stack || '';
         const stacks = stack.split('\n');
         const callerIndex = stacks.findIndex(line => line.includes('__getCaller'));
-        if (!removeTxt) {removeTxt=THIS_FILE} // このファイル名が含まれるスタックトレースは削除する
+        if (!removeTxt) {removeTxt=THIS_FILE_NAME} // このファイル名が含まれるスタックトレースは削除する
         return (stacks[callerIndex]) ? this.#delStacks(stacks.slice(callerIndex)).join('\n') : 'Unknown'
     }
 }
@@ -476,7 +481,8 @@ class ResultHtml {
         td0.className = ``;
         td0.innerHTML = c.msg.split('\n').join('<br>');
         td1.innerHTML = `対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}`;
-        td2.innerHTML = c.stacks.join('<br>');
+//        td2.innerHTML = c.stacks.join('<br>');
+        td2.innerHTML = this.#stackTrace(c);
         tr.append(td0, td1, td2);
         return tr;
     }
@@ -484,7 +490,30 @@ class ResultHtml {
         const records = this._.a._.cases.filter(c=>[1,2].some(v=>v===c.statusCode)).toSorted((a,b)=>a.id-b.id);
         return 0===records.length ? '' : records.map(c=>this.#makeProblemTrHtml(c)).join('\n');
     }
-    #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
+    #makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${this.#stackTrace(c)}</td></tr>`}
+    //#makeProblemTrHtml(c) {console.log(c);return `<tr class="${StatusCodeOfNames[c.statusCode]}" data-id="${c.id}"><td>${c.msg.split('\n').join('<br>')}</td><td>対象id:${c.id}<br>コード:${c.codeStr ? c.codeStr.split('\n').join('<br>') : c.test.toString()}</td><td>${c.stacks ? c.stacks.join('<br>') : ''}</td></tr>`}
+    
+    #stackTrace(c) {
+        const stacks = [];
+        if (c.notFn && c.traces) {stacks.push(c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME))[0])}   // テストコード定義箇所
+        if (c.stacks) {stacks.push(...c.stacks.filter(v=>v))} // 例外発生箇所
+//        const stacks = c.stacks ? [...c.stacks].filter(v=>v) : [];
+        if (c.error) {// 例外発生の歴史を辿る
+            let cause = c.error.cause;
+            console.log(`#stackTrace(c):`, c.error, cause);
+            while (cause) {
+                console.log(`caused by:`, cause.constructor.name, cause.message, [cause.stack.split('\n')]);
+                //stacks.push(cause.constructor.name, cause.message, ...[cause.stack.split('\n')]);
+                //stacks.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...[cause.stack.split('\n')]);
+                stacks.push(`caused by: ${cause.constructor.name}, ${cause.message}`, ...cause.stack.split('\n'));
+                cause = cause.cause;
+            }
+        }
+        console.log(`location.pathname:`, location.pathname); // /tmp/work/JS.Unitest.20251210123827/docs/3/index.html
+        console.log(`c.id:`, c.id, `c.notFn:`, c.notFn, `c.traces:`, c.traces.filter(v=>-1===v.indexOf(THIS_FILE_NAME)), `stacks:`, stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)), `c:`, c);
+        //return stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)).join('<br>');
+        return stacks.filter(v=>-1===v.indexOf(THIS_FILE_NAME)).map(v=>v.replaceAll(ROOT_DIR_PATH,'(略)')).join('<br>');
+    }
 }
 class Result {
     constructor(a) {this._={a:a, log:new ResultLog(a), html:new ResultHtml(a), status:new AssertStatus(a)}}

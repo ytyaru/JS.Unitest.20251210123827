@@ -32,6 +32,8 @@ window.addEventListener('DOMContentLoaded', (event) => {
         a.e(new TypeError('期待するメッセージ'), ()=>{throw new TypeError('間違ったメッセージ')}); // 失敗 id:23 型が違う
         a.e(Error, '期待するメッセージ', ()=>{throw new TypeError('間違ったメッセージ')}); // 失敗 id:24 型とメッセージが違う
         a.e(Error, '期待するメッセージ', ()=>'例外発生が期待される所で発生しなかった場合のテスト。') // 失敗 id:25
+        // テスト対象
+        a.t(()=>new Human()); // TypeError, `nameはlength=1〜32の文字列であるべきです。`
         /*
         a.fn(someFunction, [[期待値, [第一引数, 第二引数]], [[Error, 'メッセージ'], [第一引数, 第二引数]]]);
         a.fn(someFunction, [[第一引数, 第二引数]], [[第一引数, 第二引数]], (...args)=>期待値);

@@ -11,12 +11,12 @@ class Human {
     }
     get name() {return this._.name}
     set name(v) {
-        if ('string'!==typeof v && 0<v.length && v.length<=32) {throw new TypeError(`nameはlength=1〜32の文字列であるべきです。`)}
+        if (!('string'===typeof v && 0<v.length && v.length<=32)) {throw new TypeError(`nameはlength=1〜32の文字列であるべきです。`)}
         this._.name = v;
     }
     get age() {return this._.age}
     set age(v) {
-        if (Number.isSafeInteger(v) && 0<=v && v<=200) {throw new TypeError(`ageは0〜200までの整数値であるべきです。`)}
+        if (!(Number.isSafeInteger(v) && 0<=v && v<=200)) {throw new TypeError(`ageは0〜200までの整数値であるべきです。`)}
         this._.age = v;
     }
     say(msg='') {return `私は${this.name}、${this.age}歳です。${msg}`}
