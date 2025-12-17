@@ -41,7 +41,17 @@ class AssertError extends Error {
     }
 }
 const isSafeInt = (v)=>Number.isSafeInteger(v),
-      isStr = (v)=>'string'===typeof v;
+      isStr = (v)=>'string'===typeof v,
+      isNestAry = (v)=>Array.isArray(v) && 0<v.length && Array.isArray(v[0]);
+const AsyncFunction = (async()=>{}).constructor,
+      GeneratorFunction = (function*(){yield undefined;}).constructor,
+      AsyncGeneratorFunction = (async function*(){yield undefined;}).constructor,
+      isFn = (v)=>'function'===typeof v, // 関数全般(無印, Async, Generator, AsyncGenerator)
+      isSFn = (v)=>isFn(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
+//      isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
+      isAFn = (v)=>v instanceof AsyncFunction,
+      isGFn = (v)=>v instanceof GeneratorFunction,
+      isAGFn = (v)=>v instanceof AsyncGeneratorFunction;
 class Unitest {
     constructor() {
         this._ = {st:new StackTracer(), fn:null, rl:null, a:null, scripts:[]};
@@ -192,8 +202,8 @@ class Unitest {
 const isB = (v)=>'boolean'===typeof v,
     isS = (v)=>'string'===typeof v,
     isReg = (v)=>v instanceof RegExp,
-    isFn = (v)=>'function'===typeof v,
-    isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
+//    isFn = (v)=>'function'===typeof v,
+//    isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
     isCls = (v)=>(isFn(v) && Boolean(v.toString?.().match(/^class /))),
     getTag = (v)=>Object.prototype.toString.call(v),
     isIns = (v)=>null!==v && 'object'===typeof v && 'Object Array'.every(t=>`[object ${t}]`!==getTag(v)),
@@ -249,30 +259,379 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
         else {throw new TypeError(`入力値不正。#makeTestFn(): ${args}`)}
     }
 }
-class FunctionAssertion {
-    fn(...args) {}
+class GeneralAssertion {// t,f,e
+
 }
-class ClassAssertion {
-    cls(...args) {}
+class FunctionAssertion {
+    // 指定した関数が指定した戻り値であることを確認する
+    // 引数パターン
+    //   単数形
+    //     (関数ポインタ, 戻り値)                                                    // 引数なしで呼び出し戻り値が指定した値と一致するかを確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], 戻り値)                         // 引数ありで呼び出し戻り値が指定した値と一致するかを確認する
+    //     (関数ポインタ, [[第一引数が配列の場合], 第二引数, ...], 戻り値)           // 引数ありで呼び出し戻り値が指定した値と一致するかを確認する
+    //     (関数ポインタ, [[全引数が配列の場合], [全引数が配列の場合], ...], 戻り値) // 引数ありで呼び出し戻り値が指定した値と一致するかを確認する
+    //   複数形はfns()で実行すること
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], [第一引数, 第二引数, ...], ...], (...args)=>戻り値)  // 全引数が配列の関数をテストする時混同してしまう
+    // 関数ポインタ・期待値計算式
+    //   Function, AsyncFunction, GeneratorFunction, AsyncGeneratorFunction, の4種類ある
+    // 疑問
+    //   引数に配列を受け取る関数をテストしたい時は複数形と区別できなくなってしまうのでは？→fns()で別関数化することで区別する。
+    fn(...args) {
+        if (args.length < 2) {throw new TestError(`fn()の引数は二つ以上必要です。`)}
+        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (2===args.length) {// 単数形 引数あり (関数ポインタ, 戻り値)
+            this.#addCase(args[0], args[1], []);
+        } else if (3===args.length) {
+            this.#addCase(args[0], args[2], args[1]);
+        }
+        throw new TestError(`fn()の引数が不正です。次のいずれかのみ有効です。
+(関数ポインタ, 戻り値)
+(関数ポインタ, [第一引数, 第二引数, ...], 戻り値)`);
+//(関数ポインタ, [[], [第一引数, 第二引数, ...], [第一引数, 第二引数, ...], ...], (...args)=>戻り値)`);
+    }
+    // 指定した関数が指定した戻り値であることを確認する
+    // 引数パターン
+    //   複数形
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], [第一引数, 第二引数, ...], ...], (...args)=>戻り値)
+    //     (関数ポインタ, [[], [[第一引数が配列], 第二引数, ...], [[全引数が配列], [全引数が配列], ...], ...], (...args)=>戻り値)
+    // 関数ポインタ・期待値計算式
+    //   Function, AsyncFunction, GeneratorFunction, AsyncGeneratorFunction, の4種類ある
+    // 疑問
+    //   引数に配列を受け取る関数をテストしたい時は複数形と区別できなくなってしまうのでは？
+    fns(...args) {
+        if (3!==args.length) {throw new TestError(`fns()の引数は三つだけ必要です。次のパターンのみ有効です。
+(関数ポインタ, [[], [第一引数, 第二引数, ...], [第一引数, 第二引数, ...], ...], (i, args)=>\`${i}番目の引数パターンの戻り値\`)`)}
+        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isNestAry(args[1])) {throw new TestError(`fn()の第二引数は引数パターン配列であるべきです。例:[[], [[第一引数が配列], 第二引数, ...], [[全引数が配列], [全引数が配列], ...], ...]`)}
+        //if (!isFn(args[2]) && !isGFn(args[2]) && !isAFn(args[2]) && !isAGFn(args[2])) {throw new TestError(`fns()の第三引数は期待値を返す関数であるべきです。AsyncやGenerator関数は使えません。例: (i,args)=>\`${i}番目の引数パターンの戻り値\``)}
+        if (!isSFn(args[2])) {throw new TestError(`fns()の第三引数は期待値を返す関数であるべきです。AsyncやGenerator関数は使えません。例: (i,args)=>\`${i}番目の引数パターンの戻り値\``)}
+        // テストケース作成
+        for (let i=0; i<args[1].length; i++) {
+            this.#addCase(args[0], args[2](i, args[1][i]), args[1][i], i); // 期待値の計算は式を実行して取得する（例外発生しうる。非同期でありうる）
+        }
+    }
+    // 指定した関数が例外発生することを確認する
+    // 引数パターン
+    //   単数形 12
+    //     (関数ポインタ, Error)                                                    // 引数なしで呼び出し指定したError型か確認する
+    //     (関数ポインタ, 'エラーメッセージ')                                       // 引数なしで呼び出し指定したErrorメッセージか確認する
+    //     (関数ポインタ, /^エラーメッ/)                                            // 引数なしで呼び出し指定したErrorメッセージとマッチするか確認する
+    //     (関数ポインタ, new Error('エラーメッセージ'))                            // 引数なしで呼び出し指定したErrorメッセージか確認する
+    //     (関数ポインタ, Error, 'エラーメッセージ')                                // 引数なしで呼び出し指定したError型とメッセージか確認する
+    //     (関数ポインタ, Error, /^エラーメッ/)                                     // 引数なしで呼び出し指定したError型とメッセージか確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], Error)                         // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], 'エラーメッセージ')            // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], /^エラーメッ/)                 // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], new Error('エラーメッセージ')) // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], Error, 'エラーメッセージ')     // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    //     (関数ポインタ, [第一引数, 第二引数, ...], Error, /^エラーメッ/)          // 引数あり呼び出し指定したError型とメッセージの型か確認する
+    fe(...args) {
+        if (args.length < 2) {throw new TestError(`fn()の引数は二つ以上必要です。`)}
+        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (2===args.length) {this.#addCase(args[0], this.#mkErrExpected(args[1]), []);}
+        else if (3===args.length) {
+            if (Array.isArray(args[1])) {// 引数あり
+                this.#addCase(args[0], this.#mkErrExpected(args[2]), args[1]);
+            } else {// 引数なし
+                this.#addCase(args[0], this.#mkErrExpected(args[1], args[2]), []);
+            }
+        }
+        else if (4===args.length) {
+            this.#addCase(args[0], this.#mkErrExpected(args[2], args[3]), args[1]);
+        }
+    }
+    // 指定した関数が例外発生することを確認する
+    // 引数パターン
+    //   複数形 12
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], Error)              // 複数の引数パターンでテストする
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], 'メッセージ')     
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], /^メッセ/)        
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], new Error('メッセージ'))
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], Error, 'メッセージ')
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], Error, /^メッセ/)
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>Error])
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>`メッセージ:${i}${args}`])
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>new RegExp(`${i}${args}`)])
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>new Error('メッセージ')])
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>[Error, `メッセージ:${i}${args}`])
+    //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>[Error, new RegExp(`${i}${args}`)])
+    fes(...args) {
+        if (args.length < 3 || 4 < args.length) {throw new TestError(`fn()の引数は三〜四つ必要です。`)}
+        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isNestAry(args[1])) {throw new TestError(`fn()の第二引数は引数パターンの配列であるべきです。例:[[], [第一引数, 第二引数, ...], [[第一引数が配列], 第二引数, ...], [[全引数が配列], [全引数が配列], ...], ...]`)}
+        // テストケースを作成する
+        for (let i=0; i<args[1].length; i++) {
+            const A = args[1][i];
+            if (isFn(args[2])) {// 期待値を式で算出する記法
+                const expected = args[2](i, A); // 実行時エラーが起きうる！
+                const E = Array.isArray(expected) ? this.#mkErrExpected(...expected) : this.#mkErrExpected(expected);
+                this.#addCase(args[0], E, A, i);
+            } else {
+                     if (3===args.length) {this.#addCase(args[0], this.#mkErrExpected(args[2]), A);}
+                else if (4===args.length) {this.#addCase(args[0], this.#mkErrExpected(args[2], args[3]), A);}
+            }
+        }
+    }
+    #addCase(fn, ret, args, argsPtnIdx) {
+        const isAsync = isAFn(args[0]) || isAGFn(args[0]),
+              isGenerator = isGFn(args[0]) || isAGFn(args[0]);
+        const o = {
+            id: this._.id++,
+            expected: ret,
+            test() {this.fn.ret = args[0]();},
+            //test: ()=>args[0](), // 戻り値が確認できない！
+            /*
+            test: ()=>{
+                try {
+                    const expected = args[1];
+                    const actual = args[0]();
+                    if (expected===actual) {this._.posTry(c)}; // success;
+                    else {this._.posCatch(c)} // fail 関数の戻り値が期待値と違います。
+                } catch (e) {
+                    // fail 例外発生
+                }
+            },
+            */
+            fn: {// このパラメータから上記テストコードを生成してテスト実施すべき
+                fn: fn,
+                args: args,
+                ret: undefined,
+            },
+            isAsync: isAsync,
+            isGenerator: isGenerator,
+            notFn: false,
+            traces: (new Error('スタックトレースを取得')).stack.split('\n'),
+        };
+        if (isSafeInt(argsPtnIdx)) {o.fn.argsPtnIdx=argsPtnIdx}
+        this._.cases.push(o);
+    }
+    #mkErrExpected(...args) {
+        if (2===args.length) {
+            if (!(isErrCls(args[0]) && (isS(args[0]) || isReg(args[0])))) {throw new TestError(`fe()の期待値を引数2個で指定した時、Errorクラス、メッセージ文字列か正規表現を示すStringかRegExpであるべきです。`)}
+            return {type:args[0], msg:args[1]}
+        }
+        else if (1===args.length) {
+            const expected = {type:null, msg:null};
+            if (isErrCls(args[0])) {expected.type = args[0]}
+            else if (isErrIns(args[0])) {expected.type = args[0].constructor; expected.msg = args[0].message; }
+            else if (isS(args[0]) || isReg(args[0])) {expected.msg = args[0]}
+            else {throw new TestError(`fe()で引数が2個の時、第二引数はErrorクラスオブジェクトかエラーメッセージを示すStringかRegExpであるべきです。`)}
+        } else {throw new TestError(`fe()の期待値を指定してください。Errorクラスオブジェクトやエラーメッセージを示すStringかRegExpが必要です。`)}
+    }
+}
+class ClassAssertion extends Assertion {
+    constructor() {
+        super();
+        this._.cls = {cls:null};
+    }
+    // クラスオブジェクトを確認する
+    //cls(...args) {
+    cls(cls, fn) {// cls:テスト対象クラス, fn:(a,cls)=>{テストコード定義}
+        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        this._.cls.cls = cls;
+        // クラス関係テストコード定義
+        const a = new ClassObjectAssertion(this.#addCase(this._.cls));
+        isAFn(a) ? fn(a).then(()=>{/*完了処理*/}).catch(e=>{throw e}) : fn(a);
+        // クラス関係テストコード定義
+        // fn(); asyncの場合も実行したい。
+        // Sync,Async各テスト実行はしない？
+        // Promise.allSettled(acs.map(a=>a.test())).then((results)=>{
+    }
+    #addCase(cls) {
+        const isAsync = isAFn(args[0]) || isAGFn(args[0]),
+              isGenerator = isGFn(args[0]) || isAGFn(args[0]);
+        const o = {
+            id: this._.id++,
+            expected: ret,
+            cls: {
+                cls: cls,
+            },
+//            test() {this.fn.ret = args[0]();},
+            /*
+            fn: {// このパラメータから上記テストコードを生成してテスト実施すべき
+                fn: fn,
+                args: args
+                ret: undefined,
+            },
+            isAsync: isAsync,
+            isGenerator: isGenerator,
+            */
+            notFn: false,
+            traces: (new Error('スタックトレースを取得')).stack.split('\n'),
+        };
+        if (isSafeInt(argsPtnIdx)) {o.fn.argsPtnIdx=argsPtnIdx}
+        this._.cases.push(o);
+        return o;
+    }
+}
+class ClassObjectAssertion {// クラスが持つものをテストする
+    constructor(c) {
+        this._ = {c:c, cases:[]};
+    }
+    has(name) {// 指定名プロパティを持っているか（変数、ディスクリプタ（ゲッター、セッター）、クラスメソッド）
+        if (isS(name)) {
+            //const c = this.#addCase(cls);
+//            const c = this._.c;
+            const c = this.#addCase();
+            //c.test = ()=>Reflect(this._.c.cls.cls, name);
+            c.test = ()=>{
+                const has = Reflect.has(this._.c.cls.cls, name);
+                if (!has) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。`)}
+            };
+        }
+        else if (Array.isArray(name) && name.every(n=>isS(n))) {
+            for (let i=0; i<name.length; i++) {
+                const c = this.#addCase();
+                c.cls.argsPtnIdx = i;
+                c.test = ()=>{
+                    const has = Reflect.has(this._.c.cls.cls, name);
+                    if (!has) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。引数パターンidx:${i}`)}
+                };
+//                c.test = ()=>Reflect.has(c.cls.cls, name[i]);
+//                c.problem = {
+//                    fail: `クラスが所有することを期待したプロパティ ${name[i]} が存在しません。: `,
+//                };
+            }
+        }
+        else {throw new TestError(`has()は引数が文字列かその配列であるべきです。`)}
+    }
+    #addCase() {
+        this._.c.id++
+        const o = {...this._.c};
+        this._.cases.push(o);
+        return o;
+    }
+    // クラス変数の値を確認する
+    // 引数パターン
+    // (name, value)                                        // 戻り値がプリミティブ型に限る
+    // (name, (actual)=>actual.var===1 && actual.some===2)  // 戻り値がオブジェクト型でも対応可
+    // 
+    // (name, (a)=>{a.v('someVar', 1); a.g('someGetter', 22)})  // Class.nameの取得結果がオブジェクト（クラス、インスタンス、{}、関数）により各種Assertが渡される
+    //                                                          // でも↑はまず何の型が返るか明示的に確認したい。
+    //                                                          // でも無数にある: 'class'/'instance'/'function'/'array'/'Map'/'Set'/.../'object'
+    // (name, '戻り値の型', (a)=>{テスト定義})
+    // (name, (actual, a)=>{a.t(actual instance SomeClass); a.v('someVar', 1); a.g('someGetter', 22)}) // 式の場合はこれが全てを包含する方法か
+    v(name, expected) {// クラス変数
+        this._.c.test = ()=>{
+            if (!Reflect.has(this._.c.cls.cls, name)) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。`)}
+            //const V = Reflect.get(this._.cls, name);
+            const actual = Reflect.get(this._.cls, name);
+            this.#callExpected(expected, actual); // 期待値がプリミティブorオブジェクト（複数要素を確認する必要がある）
+        };
+        return this; // メソッドチェーン可能にする
+    }
+    // クラスのゲッターが返す値を確認する
+    // 引数パターン
+    // (name, expected)                                        // 戻り値がプリミティブ型に限る
+    // (name, (actual, a)=>{a.t(actual instance SomeClass); a.v('someVar', 1); a.g('someGetter', 22)}) // 式の場合はこれが全てを包含する方法か
+    g(name, expected) {// クラスゲッター
+        this._.c.test = ()=>{
+            if (!Reflect.has(this._.c.cls.cls, name)) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。`)}
+            if (!this._hasGetter(this._.c.cls.cls[name])){throw new AssertError(`クラスが所有する ${name} はゲッターであることを期待していますが非ゲッターです。`)};
+            const actual = Reflect.get(this._.cls, name);
+            if (actual!==expected) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} の値が期待値と違います。
+期待値: ${expected}
+実際値: ${actual}`)}
+            this.#callExpected(expected, actual); // 期待値がプリミティブorオブジェクト（複数要素を確認する必要がある）
+        };
+    }
+    // クラスのセッターを実行確認する
+    // 引数パターン
+    // (name, arg, expected)                                        // 戻り値がプリミティブ型に限る
+    // (name, arg, (actual, a)=>{a.t(actual instance SomeClass); a.v('someVar', 1); a.g('someGetter', 22)}) // 式の場合はこれが全てを包含する方法か
+    s(name, arg, expected) {// クラスセッター
+        this._.c.test = ()=>{
+            if (!Reflect.has(this._.c.cls.cls, name)) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。`)}
+            if (!this._hasSetter(this._.c.cls.cls[name])){throw new AssertError(`クラスが所有する ${name} はセッターであることを期待していますが非セッターです。`)};
+            const actual = Reflect.set(this._.cls, name, arg);
+            if (actual!==expected) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} の値が期待値と違います。
+期待値: ${expected}
+実際値: ${actual}`)}
+            this.#callExpected(expected, actual); // 期待値がプリミティブorオブジェクト（複数要素を確認する必要がある）
+        };
+    }
+    // クラスのメソッドを実行確認する
+    // 引数パターン
+    // (name, args, expected)                                        // 戻り値がプリミティブ型に限る
+    // (name, args, (actual, a)=>{a.r('acualの値'); a.t(actual instance SomeClass); a.v('someVar', 1); a.g('someGetter', 22)}) // 式の場合はこれが全てを包含する方法か
+    m(name, arg, expected) {// クラスメソッド
+        this._.c.test = ()=>{
+            if (!Reflect.has(this._.c.cls.cls, name)) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} が存在しません。`)}
+            if (!this._hasSetter(this._.c.cls.cls[name])){throw new AssertError(`クラスが所有する ${name} はセッターであることを期待していますが非セッターです。`)};
+            const actual = Reflect.set(this._.cls, name, arg);
+            if (actual!==expected) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} の値が期待値と違います。
+期待値: ${expected}
+実際値: ${actual}`)}
+            this.#callExpected(expected, actual); // 期待値がプリミティブorオブジェクト（複数要素を確認する必要がある）
+        };
+    }
+    // 例外発生を期待するテストケース
+    ge(name, ...expecteds) {}
+    se(name, ...expecteds) {}
+    me(name, ...expecteds) {}
+    // ゲッター・セッター用
+    _isPropertyDescriptor(obj) {return this.#isPropertyDescriptor(obj)}
+    _hasGetter(obj) {return this.#isPropertyDescriptor(obj, 1)}
+    _hasSetter(obj) {return this.#isPropertyDescriptor(obj, 2)}
+    #isPropertyDescriptor(obj, gs=0) {// gs:0:get+set, gs:1:get, gs:2:set
+        if (typeof obj !== 'object' || obj === null) {return false;}
+        // データディスクリプタまたはアクセサディスクリプタの必須キーをチェック
+        const hasValueOrWritable = 'value' in obj || 'writable' in obj;
+        const hasGetterOrSetter = 0===gs
+            ? ('get' in obj || 'set' in obj)
+            : (1===gs
+                ? 'get' in obj
+                : (2===gs
+                    ? 'set' in obj
+                    : (()=>{throw Error(`プログラムエラー。gsは0,1,2のいずれかのみ有効です。`)})()));
+        return hasValueOrWritable || hasGetterOrSetter;
+    }
+    #callExpected(expected, actual) {
+        // もし期待値がオブジェクトならどう判定する？　任意式で判定させる。
+        if (isSFn(expected)) {// 判定を式で行う場合（戻り値がオブジェクトであり複数の値を確認する必要があり単純な===判定不能な場合）
+            // もしインスタンスが変えるなら(a)=>{a.var('期待値')}のような専用式で定義したい
+            // 但しクラス、インスタンス、オブジェクト、関数のようにオブジェクトの種類毎に異なるAssertionインスタンスを渡す必要がある
+            const a = isCls(actual)
+                ? new ClassObjectAssertion(this._.c)
+                : (isIns(actual)
+                    ? new InstanceAssertion(this._.c)
+                    : (isObj(actual)
+                        ? new ObjectAssertion(this._.c)
+                        : (isFn(actual)
+                            ? new ObjectAssertion(this._.c)
+                            : new GeneralAssertion(this._.c)))); // a.t(),a.f(),a.e()
+            const R = expected(actual, a); // (actual, assertion)
+//                const R = expected(actual);
+            this._.c.resultType = R ? 'success' : 'fail'; 
+            if (!R) {throw new AssertError(`クラスが所有することを期待したプロパティ ${name} の値を判定する式がfalseを返しました。:戻り値:${actual}`)}
+        } else {
+            if (actual!==expected) {this._.c.resultType='fail'; throw new AssertError(`クラスが所有することを期待したプロパティ ${name} の値が期待値と違います。
+期待値: ${expected}
+実際値: ${actual}`)}
+            this._.c.resultType = expected===actualR ? 'success' : 'fail'; 
+        }
+
+    }
 }
 class InstanceAssertion {
+    // コンストラクタを確認する
     ins(...args) {}
 }
-class VariableAssertion {
+class VariableAssertion {// インスタンス変数を確認する
     v(...args) {}
 }
-class MethodAssertion {
+class MethodAssertion {// メソッドを確認する
     m(...args) {}
 }
-class MethodArgumentAssertion {
+class MethodArgumentAssertion {// メソッド引数を確認する
     a(...args) {}
 }
-class MethodReturnAssertion {
+class MethodReturnAssertion {// メソッド実行結果を確認する
     r(...args) {}
     times(times=1) {} // 所定のコールバック関数の引数（モック／スパイ）は何回呼ばれたか
     a(...args) {} // 所定のコールバック関数の引数（モック／スパイ）は何の引数を渡されたか
 }
-class GetterAssertion {
+class GetterAssertion {// 
     g(...args) {}
 }
 class SetterAssertion {
