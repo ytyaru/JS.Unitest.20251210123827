@@ -40,18 +40,46 @@ class AssertError extends Error {
         this.name = 'AssertError';
     }
 }
-const isSafeInt = (v)=>Number.isSafeInteger(v),
-      isStr = (v)=>'string'===typeof v,
-      isNestAry = (v)=>Array.isArray(v) && 0<v.length && Array.isArray(v[0]);
+// 型チェック系
+//   基本型
+const isB = (v)=>'boolean'===typeof v,
+      isS = (v)=>'string'===typeof v,
+    isStr = (v)=>'string'===typeof v,
+    isReg = (v)=>v instanceof RegExp,
+    isSafeInt = (v)=>Number.isSafeInteger(v),
+    isNestAry = (v)=>Array.isArray(v) && 0<v.length && Array.isArray(v[0]);
+//   関数系
 const AsyncFunction = (async()=>{}).constructor,
       GeneratorFunction = (function*(){yield undefined;}).constructor,
       AsyncGeneratorFunction = (async function*(){yield undefined;}).constructor,
       isFn = (v)=>'function'===typeof v, // 関数全般(無印, Async, Generator, AsyncGenerator)
       isSFn = (v)=>isFn(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
-//      isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
       isAFn = (v)=>v instanceof AsyncFunction,
       isGFn = (v)=>v instanceof GeneratorFunction,
       isAGFn = (v)=>v instanceof AsyncGeneratorFunction;
+      // isAyncLikeFn = (v)=>isAFn(v) || isAGFn(v), // ジェネレータ是非を問わずAsyncなら真を返す
+      // isGenLikeFn= (v)=>isGFn(v) || isAGFn(v), // Async是非を問わずジェネレータなら真を返す
+      // isFnLike = (v)=>'function'===typeof v, // async,generator問わず関数なら真を返す
+      // isFn = (v)=>isFn(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
+      // isArrFn = (v)=>区別不能, // アロー関数式なら真を返す（function定義された関数なら偽を返す）
+//   クラス・インスタンス・エラー・オブジェクトや関数オブジェクトをインスタンスとして利用しているもの
+//    isFn = (v)=>'function'===typeof v,
+//    isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
+const isCls = (v)=>(isFn(v) && Boolean(v.toString?.().match(/^class /))),
+    getTag = (v)=>Object.prototype.toString.call(v),
+    isIns = (v)=>null!==v && 'object'===typeof v && 'Object Array'.every(t=>`[object ${t}]`!==getTag(v)),
+    isErrCls = (v) =>Error===v||Error.isPrototypeOf(v);
+    isErrIns = (v) =>v instanceof Error;
+// オブジェクト・プリミティブ系
+const isObjLike = (v)=>null!==v && 'object'===typeof v,
+    getObjTag = (v)=>isObjLike(v) ? Object.prototype.call.toString(v) : typeof v, // [object Object]などを返す。プリミティブ値ならtypeofの結果('number'等)を返す。
+    isObj = (v)=>isObjLike(v) && '[object Object]'===Object.prototype.call.toString(v), // prototypeの有無を問わずオブジェクトなら真を返す
+    isNodeObj = (v)=>isObj(v) && ('prototype' in v),  // {}などで生成した普通のオブジェクトなら真を返す
+    isLeafObj = (v)=>isObj(v) && !('prototype' in v), // Object.create(null) で作成したオブジェクトなら真を返す
+    isPrim = (v)=>!isObjLike(v), // プリミティブ値であるか確認する  v !== Object(v)
+    isValidPrim = (v)=>'boolean number bigint string symbol'.some(p=>p===typeof v) && !Number.isNaN(v); // プリミティブ値のうちnull,undefined,NaNを除外したもの。symbolやInfinityは有効。
+
+
 class Unitest {
     constructor() {
         this._ = {st:new StackTracer(), fn:null, rl:null, a:null, scripts:[]};
@@ -199,26 +227,222 @@ class Unitest {
         return msg ? `テスト失敗。例外の${msg}違います。\n期待値:${3===i ? E.join(', ') : E[i-1]}\n実際値:${3===i ? A.join(', ') : A[i-1]}` : msg;
     }
 }
-const isB = (v)=>'boolean'===typeof v,
-    isS = (v)=>'string'===typeof v,
-    isReg = (v)=>v instanceof RegExp,
-//    isFn = (v)=>'function'===typeof v,
-//    isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
-    isCls = (v)=>(isFn(v) && Boolean(v.toString?.().match(/^class /))),
-    getTag = (v)=>Object.prototype.toString.call(v),
-    isIns = (v)=>null!==v && 'object'===typeof v && 'Object Array'.every(t=>`[object ${t}]`!==getTag(v)),
-    isErrCls = (v) =>Error===v||Error.isPrototypeOf(v);
-    isErrIns = (v) =>v instanceof Error;
+/*
+// コールバック関数の呼出をテストする（呼出回数、引数、戻り値）
+class Mock {
+    static fn(fn) {
+        return ()=>;
+    }
+    constructor(fn) {
+        if (!isFn(fn)) {throw new TestError(`Mock()の引数は関数であるべきです。`)}
+        this._ = {fn:fn, times:0, results:{args:[], ret:undefined, };
+        this._ = {items:new Map()};
+    }
+    get items() {return this._.items}
+    get(name) {return this._.items.get(name)}
+    set(name, fn) {
+
+    }
+
+    #makeMock() {
+        this._.times++;
+        this._.fn();
+    }
+}
+class Spy {
+    constructor() {
+        this._ = {};
+    }
+}
+*/
+class TestCaseMaker {
+    constructor() {
+        this._ = {id:0, cases:[]};
+    }
+    // General/Primitive/Object/Function/Class/Instance/Variable/Getter/Setter/Method
+    // Gerenal(t:真, f:偽, e:例外)
+    t() {}
+    f() {}
+    e() {}
+    ts() {}
+    fs() {}
+    es() {}
+    // Primitive
+    p() {}
+    // Object
+    o() {}
+    // Function
+    fn() {}
+    fe() {}
+    fns() {}
+    fes() {}
+    // Class
+    cls(cls, fn) {
+        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        // クラス関係テストコード定義
+        //const a = new ClassAssertion(this.#addCase(cls));
+        const a = new ClassAssertion(cls);
+        isAFn(a) ? fn(a).then(()=>{/*完了処理*/}).catch(e=>{throw e}) : fn(a);
+        // クラス関係テストコード定義
+        // fn(); asyncの場合も実行したい。
+        // Sync,Async各テスト実行はしない？
+        // Promise.allSettled(acs.map(a=>a.test())).then((results)=>{
+    }
+}
+class ClassTestCaseMaker {
+    // ディスクリプタ
+    d() {}
+    // method
+    m() {}
+    // value（非ディスクリプタ、非method）
+    v(...args) {
+        // 指定したプロパティ名が存在し、プリミティブ値かオブジェクトを返すこと
+    }
+}
+class DescriptorTestCaseMaker {
+    is() {} // ディスクリプタであること
+    isData() {} // データディスクリプタであること
+    isAccessor() {} // アクセサディスクリプタであること
+    hasG() {} // ゲッターを持っていること
+    hasS() {} // セッターを持っていること
+    hasV() {} // バリューを持っていること
+    writable() {}
+    enumerable() {}
+    configurable() {}
+    g() {} // ゲッターを実行して値を返す
+    s() {} // セッターを実行して値を返す
+    v() {} // バリューを参照して値を返す
+    fn() {} // バリューに関数が設定されていた時は実行して値を返す
+}
+class ObjectAssertion {
+    constructor(o, n) {// object[name]
+        this._ = {o:o, n:n}
+    }
+    has() {// 所定のオブジェクトに所定の名前をしたプロパティが存在することをテストする
+        const R = Reflect.has(this._.o, this._.n);
+        if (!R) {throw new AssertError(`存在することが期待されたプロパティ ${this._.n} がありません。`)}
+    }
+    hasD() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在することをテストする
+
+    }
+    hasFn() {// 所定のオブジェクトに所定の名前をした関数が存在することをテストする
+    }
+
+    hasG() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasS() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasM() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasP() {// 所定のオブジェクトに所定の名前をしたプロパティが存在し、それはプリミティブ値を返すことをテストする
+    }
+    hasO() {// 所定のオブジェクトに所定の名前をしたプロパティが存在し、それはオブジェクトを返すことをテストする
+
+    }
+}
+class DiscriptorAssertion {
+    is(obj) {// oはディスクリプタであることをテストする
+        this.#isPropertyDescriptor(obj, gs=0)
+    }
+    hasG() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasS() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasM() {// 所定のオブジェクトに所定の名前をしたディスクリプタが存在し、それはget()を持っていることをテストする
+    }
+    hasP() {// 所定のオブジェクトに所定の名前をしたプロパティが存在し、それはプリミティブ値を返すことをテストする
+    }
+    hasO() {// 所定のオブジェクトに所定の名前をしたプロパティが存在し、それはオブジェクトを返すことをテストする
+
+    }
+    _isPropertyDescriptor(obj) {return this.#isPropertyDescriptor(obj)}
+    _hasGetter(obj) {return this.#isPropertyDescriptor(obj, 1)}
+    _hasSetter(obj) {return this.#isPropertyDescriptor(obj, 2)}
+    // ディスクリプタか否か
+    // ディスクリプタは次の二種類ある。
+    // ・データディスクリプタ
+    // ・アクセサディスクリプタ
+    #isDescriptor(obj) {
+
+    }
+    #isDataDescriptor(obj) {
+
+    }
+    #isAccesserDescriptor(obj) {
+
+    }
+    #isObj(obj) {return null!==obj && 'object'===typeof obj && '[object Object]'===Object.prototype.call.toString(obj)}
+    #isPropertyDescriptor(obj, gs=0) {// gs:0:get+set, gs:1:get, gs:2:set
+        if (null===obj || 'object'!==typeof obj) {return false}
+//        if (typeof obj !== 'object' || obj === null) {return false;}
+        // データディスクリプタまたはアクセサディスクリプタの必須キーをチェック
+        const hasValueOrWritable = 'value' in obj || 'writable' in obj;
+        const hasGetterOrSetter = 0===gs
+            ? ('get' in obj || 'set' in obj)
+            : (1===gs
+                ? 'get' in obj
+                : (2===gs
+                    ? 'set' in obj
+                    : (()=>{throw Error(`プログラムエラー。gsは0,1,2のいずれかのみ有効です。`)})()));
+        return hasValueOrWritable || hasGetterOrSetter;
+    }
+
+}
+class PrimitiveAssertion {
+    is() {
+
+    }
+    n() {// Number型であること
+
+    }
+    i() {// BigInt型であること
+
+
+
+    }
+}
 class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からAssertインスタンスとして利用する
     constructor() { // 内部で全テストケースを関数として保持する
         this._ = {id:0, cases:[]};
     }
+    // 真偽・例外確認
+    // t(true), t(()=>true), e(Error, ()=>例外発生を期待するコード), e(Error, 'エラーメッセージ', ()=>), e(Error, /^エラーメ/, ()=>), e(new Error('メッセ'), ()=>)
     t(...args) {this.#makeTestFn(true, ...args)}
     f(...args) {this.#makeTestFn(false, ...args)}
     e(...args) {this.#makeTestFn(args[0], ...args.slice(1))}
-    tc(...args) {}
-    fc(...args) {}
-    ec(...args) {}
+    // 真偽・例外確認（複数形）
+    // ts([[第一引数, 第二引数, ...], [第一引数, 第二引数, ...]], (...args)=>真偽値)
+    // es(Error, 'メッセージ', [[第一引数, 第二引数, ...], [第一引数, 第二引数, ...]], (...args)=>例外発生を期待するコード)
+    ts(...args) {}
+    fs(...args) {}
+    es(...args) {}
+    // テスト対象＝プリミティブ値＝バリュー＝値＝変数＝variable＝primitive
+    // (expected, actual)     expected===actual
+    // ((a)=>a.b().n().i().s().isNull().isUndefined().isSymbol().isNaN().isInfinity().isNegInf().isBlankStr())
+    p(...args) {}
+    // テスト対象＝関数
+    fn(targetFn, testFn) {}
+    fns(targetFn, ...args) {}
+    fe(targetFn, ...args) {}
+    fes(targetFn, ...args) {}
+    // テスト対象＝オブジェクト
+    obj(obj, fn) {
+
+    }
+    // テスト対象＝クラス
+    // (cls, (a)=>a.v().g().s().m().ins((a)=>a.v().g().s().m(argsPtn, (actual, a)=>a.r())))
+    cls(cls, fn) {// cls:テスト対象クラス, fn:(a,cls)=>{テストコード定義}
+        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        this._.cls.cls = cls;
+        // クラス関係テストコード定義
+        const a = new ClassObjectAssertion(this.#addCase(this._.cls));
+        isAFn(a) ? fn(a).then(()=>{/*完了処理*/}).catch(e=>{throw e}) : fn(a);
+        // クラス関係テストコード定義
+        // fn(); asyncの場合も実行したい。
+        // Sync,Async各テスト実行はしない？
+        // Promise.allSettled(acs.map(a=>a.test())).then((results)=>{
+    }
+
     get _syncs() {return this._.cases.filter(c=>!c.isAsync)} // 同期系テストケース一覧
     get _asyncs() {return this._.cases.filter(c=>c.isAsync)} // 非同期系テストケース一覧
     get _syncStatuses() {return this._getStatuses('sync', this._syncs)}
