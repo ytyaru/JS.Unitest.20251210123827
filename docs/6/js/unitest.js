@@ -52,32 +52,46 @@ const isB = (v)=>'boolean'===typeof v,
 const AsyncFunction = (async()=>{}).constructor,
       GeneratorFunction = (function*(){yield undefined;}).constructor,
       AsyncGeneratorFunction = (async function*(){yield undefined;}).constructor,
-      isFn = (v)=>'function'===typeof v, // 関数全般(無印, Async, Generator, AsyncGenerator)
-      isSFn = (v)=>isFn(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
+      isFnLike = (v)=>'function'===typeof v, // 関数全般(無印, Async, Generator, AsyncGenerator)
+      isAFnLike = (v)=>isAFn(v) || isAGFn(v), // ジェネレータ是非を問わずAsyncなら真を返す
+      isGFnLike= (v)=>isGFn(v) || isAGFn(v), // Async是非を問わずジェネレータなら真を返す
+      isFn = (v)=>isFnLike(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
       isAFn = (v)=>v instanceof AsyncFunction,
       isGFn = (v)=>v instanceof GeneratorFunction,
       isAGFn = (v)=>v instanceof AsyncGeneratorFunction;
-      // isAyncLikeFn = (v)=>isAFn(v) || isAGFn(v), // ジェネレータ是非を問わずAsyncなら真を返す
-      // isGenLikeFn= (v)=>isGFn(v) || isAGFn(v), // Async是非を問わずジェネレータなら真を返す
       // isFnLike = (v)=>'function'===typeof v, // async,generator問わず関数なら真を返す
-      // isFn = (v)=>isFn(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
+      // isFn = (v)=>isFnLike(v) && !isGFn(v) && !isAFn(v) && !isAGFn(v), // 無印関数, SyncFn, SimpleFn
       // isArrFn = (v)=>区別不能, // アロー関数式なら真を返す（function定義された関数なら偽を返す）
 //   クラス・インスタンス・エラー・オブジェクトや関数オブジェクトをインスタンスとして利用しているもの
 //    isFn = (v)=>'function'===typeof v,
-//    isAFn = (v)=>isFn(v) && v.constructor.name === 'AsyncFunction',
-const isCls = (v)=>(isFn(v) && Boolean(v.toString?.().match(/^class /))),
-    getTag = (v)=>Object.prototype.toString.call(v),
-    isIns = (v)=>null!==v && 'object'===typeof v && 'Object Array'.every(t=>`[object ${t}]`!==getTag(v)),
-    isErrCls = (v) =>Error===v||Error.isPrototypeOf(v);
-    isErrIns = (v) =>v instanceof Error;
+//    isAFn = (v)=>isFnLike(v) && v.constructor.name === 'AsyncFunction',
 // オブジェクト・プリミティブ系
 const isObjLike = (v)=>null!==v && 'object'===typeof v,
-    getObjTag = (v)=>isObjLike(v) ? Object.prototype.call.toString(v) : typeof v, // [object Object]などを返す。プリミティブ値ならtypeofの結果('number'等)を返す。
+    //getObjTag = (v)=>isObjLike(v) ? Object.prototype.call.toString(v) : typeof v, // [object Object]などを返す。プリミティブ値ならtypeofの結果('number'等)を返す。
+    //getTag = (v)=>isObjLike(v) ? Object.prototype.call.toString(v) : typeof v, // [object Object]などを返す。プリミティブ値ならtypeofの結果('number'等)を返す。
+    getTag = (v)=>isObjLike(v) ? Object.prototype.call.toString(v) : `[primitive ${null===v ? 'null' : typeof v}]`, // [object Object], [primitive number.NaN]を返す
+    getPrimTag = (v)=>{
+        const t = typeof v;
+        return `[primitive ${null===v ? 'null' : ('number'!==t ? t : getNumTag(v))}]`;
+    },
+    getNumTag = (v)=>{
+             if (Number.isNaN(v)) {return 'NaN'}
+        else if (Number.POSITIVE_INFINITY===v) {return 'PositiveInfinity'}
+        else if (Number.NEGATIVE_INFINITY===v) {return 'NegativeInfinity'}
+        else if (Number.isSafeInteger(v)) {return 'SafeInteger'}
+        else if (Number.isInteger(v)) {return 'Integer'}
+        else {return 'Finite'}
+    },
     isObj = (v)=>isObjLike(v) && '[object Object]'===Object.prototype.call.toString(v), // prototypeの有無を問わずオブジェクトなら真を返す
     isNodeObj = (v)=>isObj(v) && ('prototype' in v),  // {}などで生成した普通のオブジェクトなら真を返す
     isLeafObj = (v)=>isObj(v) && !('prototype' in v), // Object.create(null) で作成したオブジェクトなら真を返す
     isPrim = (v)=>!isObjLike(v), // プリミティブ値であるか確認する  v !== Object(v)
     isValidPrim = (v)=>'boolean number bigint string symbol'.some(p=>p===typeof v) && !Number.isNaN(v); // プリミティブ値のうちnull,undefined,NaNを除外したもの。symbolやInfinityは有効。
+const isCls = (v)=>(isFnLike(v) && Boolean(v.toString?.().match(/^class /))),
+//    getTag = (v)=>Object.prototype.toString.call(v),
+    isIns = (v)=>null!==v && 'object'===typeof v && 'Object Array'.every(t=>`[object ${t}]`!==getTag(v)),
+    isErrCls = (v) =>Error===v||Error.isPrototypeOf(v);
+    isErrIns = (v) =>v instanceof Error;
 
 
 class Unitest {
@@ -99,7 +113,7 @@ class Unitest {
         try {
             if (0===args.length) {throw new TestError(`unitest.test()の引数はテストコードを定義する式を渡す必要があります。その前に任意でテスト対象のJSファイルパスを渡せます。\n((a)=>{a.t(true)})\n('target.js', (a)=>{a.t(true)})\n('tar1.js', 'tar2.js', 'tar3.js', (a)=>{a.t(true)})`)}
             fn = args.at(-1);
-            if (!isFn(fn)) {throw new TestError(`unitest.test()の最後の引数はテストコードを定義する式であるべきです。例: (a)={a.t(true); a.f(false); a.e(Error, 'msg', ()=>new Error('msg'));}`)}
+            if (!isFnLike(fn)) {throw new TestError(`unitest.test()の最後の引数はテストコードを定義する式であるべきです。例: (a)={a.t(true); a.f(false); a.e(Error, 'msg', ()=>new Error('msg'));}`)}
             paths = args.slice(0, -1);
             this.unloadScripts();
         } catch(e) {this._.result.throw(e);} // unitest.test()呼び出しで例外発生
@@ -141,7 +155,7 @@ class Unitest {
     #define(a, fn) {
         this._.fn = fn; // テストコード定義関数(エラー箇所表示用)
         const example = `(a)={a.t(true); a.f(false); a.e(Error, 'msg', ()=>new Error('msg'));}`;
-        if (!isFn(fn)) {throw new TestError(`unitest.assert()の引数は関数であるべきです。例: ${example}`)}
+        if (!isFnLike(fn)) {throw new TestError(`unitest.assert()の引数は関数であるべきです。例: ${example}`)}
         try {fn(a);} catch (e) {throw new TestError('テストケース定義中に例外発生しました。', e)} // コード箇所の表示＆ログの色を青にしたい
         if (0===a._.cases.length) {throw new TestError(`テストケースが一つもありません。次のように実装してください。例: ${example}`)}
         console.log(a._.cases);
@@ -234,7 +248,7 @@ class Mock {
         return ()=>;
     }
     constructor(fn) {
-        if (!isFn(fn)) {throw new TestError(`Mock()の引数は関数であるべきです。`)}
+        if (!isFnLike(fn)) {throw new TestError(`Mock()の引数は関数であるべきです。`)}
         this._ = {fn:fn, times:0, results:{args:[], ret:undefined, };
         this._ = {items:new Map()};
     }
@@ -278,7 +292,7 @@ class TestCaseMaker {
     fes() {}
     // Class
     cls(cls, fn) {
-        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        if (!(isCls(cls) && isFnLike(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
         // クラス関係テストコード定義
         //const a = new ClassAssertion(this.#addCase(cls));
         const a = new ClassAssertion(cls);
@@ -432,7 +446,7 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
     // テスト対象＝クラス
     // (cls, (a)=>a.v().g().s().m().ins((a)=>a.v().g().s().m(argsPtn, (actual, a)=>a.r())))
     cls(cls, fn) {// cls:テスト対象クラス, fn:(a,cls)=>{テストコード定義}
-        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        if (!(isCls(cls) && isFnLike(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
         this._.cls.cls = cls;
         // クラス関係テストコード定義
         //const a = new ClassObjectAssertion(this.#addCase(this._.cls));
@@ -465,16 +479,16 @@ class Assertion {// Unitest.assert((a)=>{})のように利用者は外部からA
     }
     #makeTestFn(expected, ...args) {// expected: true/false/new Error('message')/Error + (msg)=>msg.match(/^some$/)/RegExp
         const L = args[args.length-1];
-        if ((isB(expected) && 1===args.length && (isB(L) || isFn(L)))
-         || (isErrIns(expected) && 1===args.length && isFn(L))
-         || (isErrCls(expected) && 1===args.length && isFn(L))
-         || (isErrCls(expected) && 2===args.length && (isS(args[0]) || isReg(args[0])) && isFn(L))) {this._.cases.push({
+        if ((isB(expected) && 1===args.length && (isB(L) || isFnLike(L)))
+         || (isErrIns(expected) && 1===args.length && isFnLike(L))
+         || (isErrCls(expected) && 1===args.length && isFnLike(L))
+         || (isErrCls(expected) && 2===args.length && (isS(args[0]) || isReg(args[0])) && isFnLike(L))) {this._.cases.push({
             id: this._.id++,
             expected: isB(expected)
                 ? expected
                 : ({type: (isErrCls(expected) ? expected : expected.constructor),
                     msg: (isErrCls(expected) && 1===args.length ? undefined : (isErrIns(expected) ? expected.message : args[0]))}),
-            test: isFn(L) ? L : ()=>args[0],
+            test: isFnLike(L) ? L : ()=>args[0],
             isAsync:0===args.length ? false : isAFn(L),
             notFn: (isB(expected) && 1===args.length && isB(L)),
             traces: (new Error('スタックトレースを取得')).stack.split('\n'),
@@ -503,7 +517,7 @@ class FunctionAssertion {
     //   引数に配列を受け取る関数をテストしたい時は複数形と区別できなくなってしまうのでは？→fns()で別関数化することで区別する。
     fn(...args) {
         if (args.length < 2) {throw new TestError(`fn()の引数は二つ以上必要です。`)}
-        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isFnLike(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
         if (2===args.length) {// 単数形 引数あり (関数ポインタ, 戻り値)
             this.#addCase(args[0], args[1], []);
         } else if (3===args.length) {
@@ -526,9 +540,9 @@ class FunctionAssertion {
     fns(...args) {
         if (3!==args.length) {throw new TestError(`fns()の引数は三つだけ必要です。次のパターンのみ有効です。
 (関数ポインタ, [[], [第一引数, 第二引数, ...], [第一引数, 第二引数, ...], ...], (i, args)=>\`${i}番目の引数パターンの戻り値\`)`)}
-        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isFnLike(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
         if (!isNestAry(args[1])) {throw new TestError(`fn()の第二引数は引数パターン配列であるべきです。例:[[], [[第一引数が配列], 第二引数, ...], [[全引数が配列], [全引数が配列], ...], ...]`)}
-        //if (!isFn(args[2]) && !isGFn(args[2]) && !isAFn(args[2]) && !isAGFn(args[2])) {throw new TestError(`fns()の第三引数は期待値を返す関数であるべきです。AsyncやGenerator関数は使えません。例: (i,args)=>\`${i}番目の引数パターンの戻り値\``)}
+        //if (!isFnLike(args[2]) && !isGFn(args[2]) && !isAFn(args[2]) && !isAGFn(args[2])) {throw new TestError(`fns()の第三引数は期待値を返す関数であるべきです。AsyncやGenerator関数は使えません。例: (i,args)=>\`${i}番目の引数パターンの戻り値\``)}
         if (!isSFn(args[2])) {throw new TestError(`fns()の第三引数は期待値を返す関数であるべきです。AsyncやGenerator関数は使えません。例: (i,args)=>\`${i}番目の引数パターンの戻り値\``)}
         // テストケース作成
         for (let i=0; i<args[1].length; i++) {
@@ -552,7 +566,7 @@ class FunctionAssertion {
     //     (関数ポインタ, [第一引数, 第二引数, ...], Error, /^エラーメッ/)          // 引数あり呼び出し指定したError型とメッセージの型か確認する
     fe(...args) {
         if (args.length < 2) {throw new TestError(`fn()の引数は二つ以上必要です。`)}
-        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isFnLike(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
         if (2===args.length) {this.#addCase(args[0], this.#mkErrExpected(args[1]), []);}
         else if (3===args.length) {
             if (Array.isArray(args[1])) {// 引数あり
@@ -582,12 +596,12 @@ class FunctionAssertion {
     //     (関数ポインタ, [[], [第一引数, 第二引数, ...], ...], (i, args)=>[Error, new RegExp(`${i}${args}`)])
     fes(...args) {
         if (args.length < 3 || 4 < args.length) {throw new TestError(`fn()の引数は三〜四つ必要です。`)}
-        if (!isFn(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
+        if (!isFnLike(args[0])) {throw new TestError(`fn()の第一引数は関数オブジェクトであるべきです。`)}
         if (!isNestAry(args[1])) {throw new TestError(`fn()の第二引数は引数パターンの配列であるべきです。例:[[], [第一引数, 第二引数, ...], [[第一引数が配列], 第二引数, ...], [[全引数が配列], [全引数が配列], ...], ...]`)}
         // テストケースを作成する
         for (let i=0; i<args[1].length; i++) {
             const A = args[1][i];
-            if (isFn(args[2])) {// 期待値を式で算出する記法
+            if (isFnLike(args[2])) {// 期待値を式で算出する記法
                 const expected = args[2](i, A); // 実行時エラーが起きうる！
                 const E = Array.isArray(expected) ? this.#mkErrExpected(...expected) : this.#mkErrExpected(expected);
                 this.#addCase(args[0], E, A, i);
@@ -652,7 +666,7 @@ class ClassAssertion extends Assertion {
     // クラスオブジェクトを確認する
     //cls(...args) {
     cls(cls, fn) {// cls:テスト対象クラス, fn:(a,cls)=>{テストコード定義}
-        if (!(isCls(cls) && isFn(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
+        if (!(isCls(cls) && isFnLike(fn))) {throw new TestError(`cls()の引数はテスト対象クラスとテストコード定義メソッドの二つのみ有効です。`)}
         this._.cls.cls = cls;
         // クラス関係テストコード定義
         const a = new ClassObjectAssertion(this.#addCase(this._.cls));
@@ -822,7 +836,7 @@ class ClassObjectAssertion {// クラスが持つものをテストする
                     ? new InstanceAssertion(this._.c)
                     : (isObj(actual)
                         ? new ObjectAssertion(this._.c)
-                        : (isFn(actual)
+                        : (isFnLike(actual)
                             ? new ObjectAssertion(this._.c)
                             : new GeneralAssertion(this._.c)))); // a.t(),a.f(),a.e()
             const R = expected(actual, a); // (actual, assertion)
